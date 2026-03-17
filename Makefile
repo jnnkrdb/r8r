@@ -117,11 +117,12 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) build -t ${IMG} -t localhost:$(K3D_REGISTRY_PORT)/r8r:latest .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
+	$(CONTAINER_TOOL) push localhost:$(K3D_REGISTRY_PORT)/r8r:latest
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -237,3 +238,66 @@ mv $(1) $(1)-$(3) ;\
 } ;\
 ln -sf $$(realpath $(1)-$(3)) $(1)
 endef
+
+##@ K3d Cluster Management
+
+# K3D Cluster Configs
+
+K3D_REGISTRY ?= reg-r8r
+K3D_REGISTRY_PORT ?= 5000
+
+.PHONY: k3d-create
+k3d-create: k3d-reg-create ## Create a k3d cluster with a local registry
+	@command -v k3d >/dev/null 2>&1 || { \
+		echo "k3d is not installed. Please install k3d manually."; \
+		exit 1; \
+	}
+	@case "$$(k3d cluster list -o json | jq -r '.[].name')" in \
+		*"r8r-test"*) \
+			echo "k3d cluster 'r8r-test' already exists. Skipping creation." ;; \
+		*) \
+			echo "Creating k3d cluster 'r8r-test' with local registry..."; \
+			k3d cluster create r8r-test --registry-use k3d-$(K3D_REGISTRY) --port '6443:6443@loadbalancer' ;; \
+	esac
+
+.PHONY: k3d-delete
+k3d-delete: k3d-reg-delete ## Delete the k3d cluster and its local registry
+	@command -v k3d >/dev/null 2>&1 || { \
+		echo "k3d is not installed. Please install k3d manually."; \
+		exit 1; \
+	}
+	@case "$$(k3d cluster list -o json | jq -r '.[].name')" in \
+		*"r8r-test"*) \
+			echo "Deleting k3d cluster 'r8r-test'..."; \
+			k3d cluster delete r8r-test ;; \
+		*) \
+			echo "k3d cluster 'r8r-test' does not exist. Skipping deletion." ;; \
+	esac
+
+.PHONY: k3d-reg-create
+k3d-reg-create: ## Create a local registry for k3d cluster
+	@command -v k3d >/dev/null 2>&1 || { \
+		echo "k3d is not installed. Please install k3d manually."; \
+		exit 1; \
+	}
+	@case "$$(k3d registry list -o json | jq -r '.[].name')" in \
+		*"k3d-$(K3D_REGISTRY)"*) \
+			echo "k3d registry '$(K3D_REGISTRY)' already exists. Skipping creation." ;; \
+		*) \
+			echo "Creating k3d registry '$(K3D_REGISTRY)'..."; \
+			k3d registry create $(K3D_REGISTRY) --image registry:2 --port $(K3D_REGISTRY_PORT) ;; \
+	esac
+
+.PHONY: k3d-reg-delete
+k3d-reg-delete: ## Delete the local registry for k3d cluster
+	@command -v k3d >/dev/null 2>&1 || { \
+		echo "k3d is not installed. Please install k3d manually."; \
+		exit 1; \
+	}
+	@case "$$(k3d registry list -o json | jq -r '.[].name')" in \
+		*"k3d-$(K3D_REGISTRY)"*) \
+			echo "Deleting k3d registry '$(K3D_REGISTRY)'..."; \
+			k3d registry delete $(K3D_REGISTRY) ;; \
+		*) \
+			echo "k3d registry '$(K3D_REGISTRY)' does not exist. Skipping deletion." ;; \
+	esac
