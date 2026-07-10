@@ -25,7 +25,4 @@ resources:
 - clusterobject_admin_role.yaml
 - clusterobject_editor_role.yaml
 - clusterobject_viewer_role.yaml
-- clustersecret_admin_role.yaml
-- clustersecret_editor_role.yaml
-- clustersecret_viewer_role.yaml
 

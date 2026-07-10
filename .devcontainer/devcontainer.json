@@ -1,5 +1,5 @@
 {
-  "image": "mcr.microsoft.com/devcontainers/go:1-1.24-bullseye",
+  "image": "mcr.microsoft.com/devcontainers/go:1-1.26-bullseye",
   "features": {
     "ghcr.io/audacioustux/devcontainers/kubebuilder:1": {},
     //"ghcr.io/devcontainers/features/node:1": {},

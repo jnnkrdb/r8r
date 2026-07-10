@@ -1,9 +1,11 @@
 # Build the manager binary
-FROM golang:1.24 AS builder
+FROM golang:1.26-alpine AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
-WORKDIR /workspace
+RUN mkdir -p /github.com/jnnkrdb/r8r
+WORKDIR /github.com/jnnkrdb/r8r
+
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
@@ -19,21 +21,13 @@ COPY . .
 # was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o r8r cmd/main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -a -o r8r cmd/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
-LABEL org.opencontainers.image.source=https://github.com/jnnkrdb/r8r
-
-# set envs from args
-ARG VERSION="latest"
-ENV VERSION=${VERSION}
-ARG BRANCH="-"
-ENV BRANCH=${BRANCH}
-
 WORKDIR /
-COPY --from=builder /workspace/r8r .
+COPY --from=builder /github.com/jnnkrdb/r8r/r8r .
 USER 65532:65532
 
 ENTRYPOINT ["/r8r"]

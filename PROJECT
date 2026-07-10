@@ -2,7 +2,7 @@
 # This file is used to track the info used to scaffold your project
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
-cliVersion: 4.9.0
+cliVersion: 4.15.0
 domain: jnnkrdb.de
 layout:
 - go.kubebuilder.io/v4
@@ -11,6 +11,7 @@ repo: github.com/jnnkrdb/r8r
 resources:
 - api:
     crdVersion: v1
+    namespaced: true
   controller: true
   domain: jnnkrdb.de
   group: cluster
