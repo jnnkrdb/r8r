@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2017
+Copyright (c) 2025
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -27,21 +27,36 @@ package controller
 import (
 	"context"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/v1alpha1"
+	"github.com/jnnkrdb/r8r/pkg/conditions"
+	"github.com/jnnkrdb/r8r/pkg/reconcilation/checks"
 )
+
+// ClusterObjectReconciler reconciles a ClusterObject object
+type ClusterObjectReconciler struct {
+	Client   client.Client
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
+}
+
+func (r *ClusterObjectReconciler) GetClient() client.Client          { return r.Client }
+func (r *ClusterObjectReconciler) GetScheme() *runtime.Scheme        { return r.Scheme }
+func (r *ClusterObjectReconciler) GetRecorder() events.EventRecorder { return r.Recorder }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterObjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -58,7 +73,7 @@ func (r *ClusterObjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.Namespace{},
 			handler.EnqueueRequestsFromMapFunc(
 				func(ctx context.Context, obj client.Object) (requests []reconcile.Request) {
-					var _log = log.FromContext(ctx)
+					var _log = logf.FromContext(ctx)
 					// trigger reconciliation for all clusterobjects
 					var list = &clusterv1alpha1.ClusterObjectList{}
 					if err := mgr.GetClient().List(ctx, list, &client.ListOptions{}); err != nil {
@@ -76,14 +91,14 @@ func (r *ClusterObjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			),
 		).
+		WithEventFilter(
+			predicate.Or(
+				predicate.GenerationChangedPredicate{},
+				predicate.ResourceVersionChangedPredicate{},
+				predicate.LabelChangedPredicate{},
+			),
+		).
 		Complete(r)
-}
-
-// ClusterObjectReconciler reconciles a ClusterObject object
-type ClusterObjectReconciler struct {
-	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=cluster.jnnkrdb.de,resources=clusterobjects,verbs=get;list;watch;create;update;patch;delete
@@ -101,13 +116,13 @@ type ClusterObjectReconciler struct {
 // the user.
 //
 // For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.1/pkg/reconcile
+// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.24.1/pkg/reconcile
 func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	var _log = log.FromContext(ctx)
+	var _log = logf.FromContext(ctx)
 
 	var clusterObject = &clusterv1alpha1.ClusterObject{}
 
-	if err := r.Get(ctx, req.NamespacedName, clusterObject, &client.GetOptions{}); err != nil {
+	if err := r.GetClient().Get(ctx, req.NamespacedName, clusterObject, &client.GetOptions{}); err != nil {
 		if err = client.IgnoreNotFound(err); err != nil {
 			_log.Error(err, "error fetching object from cluster")
 		}
@@ -119,8 +134,10 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// request a list of namespaces, to parse through the list and
 	// then check every namespace with the give item
 	var namespaces = &corev1.NamespaceList{}
-	if err := r.List(ctx, namespaces, &client.ListOptions{}); err != nil {
-		return ctrl.Result{}, r.throwOnError(
+	if err := r.GetClient().List(ctx, namespaces, &client.ListOptions{}); err != nil {
+
+		return ctrl.Result{}, conditions.OnError(
+			r,
 			ctx,
 			clusterObject,
 			err,
@@ -131,7 +148,8 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// request a list of namespaces, which are required to inherit the defined object
 	labelselector, err := metav1.LabelSelectorAsSelector(clusterObject.Replicator.LabelSelector)
 	if err != nil {
-		return ctrl.Result{}, r.throwOnError(
+		return ctrl.Result{}, conditions.OnError(
+			r,
 			ctx,
 			clusterObject,
 			err,
@@ -139,8 +157,9 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			"error fetching labelselector from clusterobject")
 	}
 	var requiredNamespaces = &corev1.NamespaceList{}
-	if err := r.List(ctx, requiredNamespaces, &client.ListOptions{LabelSelector: labelselector}); err != nil {
-		return ctrl.Result{}, r.throwOnError(
+	if err := r.GetClient().List(ctx, requiredNamespaces, &client.ListOptions{LabelSelector: labelselector}); err != nil {
+		return ctrl.Result{}, conditions.OnError(
+			r,
 			ctx,
 			clusterObject,
 			err,
@@ -167,23 +186,25 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	_log.Info("reconciled")
 
-	r.Recorder.Eventf(
+	r.GetRecorder().Eventf(
+		clusterObject,
 		clusterObject,
 		"Normal",
-		"ReconciledObject",
+		"ReconcileObject",
+		"Reconciled Object",
 		"successfully cloned resource in required namespaces")
 
-	return ctrl.Result{}, r.setCondition(
-		ctx,
-		clusterObject,
-		Condition_Ready,
-		metav1.ConditionTrue,
-		"DeployedResource",
-		"successfully deployed resource [%s/%s:%s]",
-		clusterObject.Replicator.Resource.GetAPIVersion(),
-		clusterObject.Replicator.Resource.GetKind(),
-		clusterObject.Replicator.Resource.GetName(),
-	)
+	return ctrl.Result{},
+		conditions.Set(r,
+			ctx,
+			clusterObject,
+			conditions.Condition_Ready,
+			metav1.ConditionTrue,
+			"DeployedResource",
+			"successfully deployed resource [%s/%s:%s]",
+			clusterObject.Replicator.Resource.GetAPIVersion(),
+			clusterObject.Replicator.Resource.GetKind(),
+			clusterObject.Replicator.Resource.GetName())
 }
 
 // ------------------------------------------------------ status functions
@@ -215,9 +236,12 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 		"clusterObject.Replicator.Resource", clusterObject.Replicator.Resource)
 
 	// check, if the object does exist in the namespace and copy its content to cache
-	doesExist, err := r.objectExists(ctx, namespace.GetName(), typedObject)
+	doesExist, err := checks.VerifyObjectExistence(
+		ctx, r.GetClient(), namespace.GetName(), typedObject.GetName(), typedObject)
+
 	if err != nil {
-		return r.throwOnError(
+		return conditions.OnError(
+			r,
 			ctx,
 			clusterObject,
 			err,
@@ -226,7 +250,17 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 	}
 
 	// check, if the object should exist in the namespace
-	shouldExist := r.objectShouldExist(namespace, requiredNamespaces)
+	shouldExist, err := checks.ShouldObjectExist(namespace, requiredNamespaces)
+	if err != nil {
+		return conditions.OnError(
+			r,
+			ctx,
+			clusterObject,
+			err,
+			"ClusterObjectFetching",
+			"error checking if the object should exist in the namespace")
+	}
+
 	_log.V(3).Info("state calculated", "shouldExist", shouldExist, "doesExist", doesExist)
 
 	// after calculating the current state, handle the 4 cases
@@ -247,12 +281,13 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 		// set the owners reference
 		// this is required for watching the dependent objects
 		if err := controllerutil.SetControllerReference(clusterObject, typedObject, r.Scheme); err != nil {
-			return r.throwOnError(ctx, clusterObject, err, "OwnerReferenceConfiguration", "unable to set owners reference")
+			return conditions.OnError(
+				r, ctx, clusterObject, err, "OwnerReferenceConfiguration", "unable to set owners reference")
 		}
 
 		// create the object in the cluster
-		if err := r.Create(ctx, typedObject, &client.CreateOptions{}); err != nil {
-			return r.throwOnError(ctx, clusterObject, err, "ObjectCreation", "error creating object in namespace")
+		if err := r.GetClient().Create(ctx, typedObject, &client.CreateOptions{}); err != nil {
+			return conditions.OnError(r, ctx, clusterObject, err, "ObjectCreation", "error creating object in namespace")
 		}
 	}
 
@@ -272,20 +307,21 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 		// set the owners reference again
 		// this is required for watching the dependent objects
 		if err := controllerutil.SetControllerReference(clusterObject, typedObject, r.Scheme); err != nil {
-			return r.throwOnError(ctx, clusterObject, err, "OwnerReferenceConfiguration", "unable to set owners reference")
+			return conditions.OnError(
+				r, ctx, clusterObject, err, "OwnerReferenceConfiguration", "unable to set owners reference")
 		}
 
 		// update the object
-		if err := r.Update(ctx, typedObject, &client.UpdateOptions{}); err != nil {
-			return r.throwOnError(ctx, clusterObject, err, "ObjectUpdate", "error updating object")
+		if err := r.GetClient().Update(ctx, typedObject, &client.UpdateOptions{}); err != nil {
+			return conditions.OnError(r, ctx, clusterObject, err, "ObjectUpdate", "error updating object")
 		}
 	}
 
 	if !shouldExist && doesExist { // --------------------------------------------------------- case 4 -> delete
 		_log.V(3).Info("deleting")
 		// delete the object
-		if err := r.Delete(ctx, typedObject, &client.DeleteOptions{}); client.IgnoreNotFound(err) != nil {
-			return r.throwOnError(ctx, clusterObject, err, "ObjectDeletion", "error deleting object")
+		if err := r.GetClient().Delete(ctx, typedObject, &client.DeleteOptions{}); client.IgnoreNotFound(err) != nil {
+			return conditions.OnError(r, ctx, clusterObject, err, "ObjectDeletion", "error deleting object")
 		}
 	}
 

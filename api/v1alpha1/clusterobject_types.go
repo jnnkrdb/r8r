@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2017
+Copyright (c) 2025
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -27,6 +27,7 @@ package v1alpha1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -65,14 +66,14 @@ type ClusterObject struct {
 
 	// metadata is a standard object metadata
 	// +optional
-	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
+	metav1.ObjectMeta `json:"metadata,omitzero"`
 
 	// +required
 	Replicator ClusterObjectReplicator `json:"replicator"`
 
 	// status defines the observed state of ClusterObject
 	// +optional
-	Status ClusterObjectStatus `json:"status,omitempty,omitzero"`
+	Status ClusterObjectStatus `json:"status,omitzero"`
 }
 
 // ClusterObject is the Schema for the clusterobjects API
@@ -91,10 +92,13 @@ type ClusterObjectReplicator struct {
 // ClusterObjectList contains a list of ClusterObject
 type ClusterObjectList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.ListMeta `json:"metadata,omitzero"`
 	Items           []ClusterObject `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ClusterObject{}, &ClusterObjectList{})
+	SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(SchemeGroupVersion, &ClusterObject{}, &ClusterObjectList{})
+		return nil
+	})
 }

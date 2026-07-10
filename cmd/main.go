@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -53,20 +52,17 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
-const (
-	probeAddr            string = ":8081"
-	metricsAddr          string = ":8443"
-	enableLeaderElection bool   = true
-)
-
 // nolint:gocyclo
 func main() {
-
+	var metricsAddr string
 	var metricsCertPath, metricsCertName, metricsCertKey string
 	var webhookCertPath, webhookCertName, webhookCertKey string
+	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
+	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8443", "The address the metrics endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&secureMetrics, "metrics-secure", false, "If set, the metrics endpoint is served securely via HTTPS.")
 	flag.StringVar(&webhookCertPath, "webhook-cert-path", "", "The directory that contains the webhook cert.")
 	flag.StringVar(&webhookCertName, "webhook-cert-name", "tls.crt", "The name of the webhook cert file.")
@@ -74,22 +70,15 @@ func main() {
 	flag.StringVar(&metricsCertPath, "metrics-cert-path", "", "The directory that contains the metrics server cert.")
 	flag.StringVar(&metricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server cert file.")
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
-	flag.BoolVar(&enableHTTP2, "enable-http2", false, "If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.BoolVar(&enableHTTP2, "enable-http2", false, "If set, HTTP/2 will be enabled for metrics and webhook servers")
 
 	opts := zap.Options{
 		Development: true,
-		// Encoder:     zapcore.NewConsoleEncoder(zapcore.EncoderConfig{}),
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
-	// printing out the build information
-	setupLog.Info("starting r8r controller",
-		"version", os.Getenv("VERSION"),
-		"branch", os.Getenv("BRANCH"),
-	)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -98,7 +87,7 @@ func main() {
 	// - https://github.com/advisories/GHSA-qppj-fm5r-hxr3
 	// - https://github.com/advisories/GHSA-4374-p667-p6c8
 	disableHTTP2 := func(c *tls.Config) {
-		setupLog.Info("disabling http/2")
+		setupLog.Info("Disabling HTTP/2")
 		c.NextProtos = []string{"http/1.1"}
 	}
 
@@ -113,11 +102,8 @@ func main() {
 	}
 
 	if len(webhookCertPath) > 0 {
-		setupLog.Info("Initializing webhook certificate watcher using provided certificates",
-			"webhook-cert-path", webhookCertPath,
-			"webhook-cert-name", webhookCertName,
-			"webhook-cert-key", webhookCertKey,
-		)
+		setupLog.Info("Initializing webhook cert watcher using provided certs",
+			"webhook-cert-path", webhookCertPath, "webhook-cert-name", webhookCertName, "webhook-cert-key", webhookCertKey)
 
 		webhookServerOptions.CertDir = webhookCertPath
 		webhookServerOptions.CertName = webhookCertName
@@ -128,7 +114,7 @@ func main() {
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
-	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.1/pkg/metrics/server
+	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.24.1/pkg/metrics/server
 	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
 		BindAddress:   metricsAddr,
@@ -140,24 +126,21 @@ func main() {
 		// FilterProvider is used to protect the metrics endpoint with authn/authz.
 		// These configurations ensure that only authorized users and service accounts
 		// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
-		// https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.1/pkg/metrics/filters#WithAuthenticationAndAuthorization
+		// https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.24.1/pkg/metrics/filters#WithAuthenticationAndAuthorization
 		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
 	}
 
-	// If the certificate is not specified, controller-runtime will automatically
-	// generate self-signed certificates for the metrics server. While convenient for development and testing,
+	// If the cert is not specified, controller-runtime will automatically
+	// generate self-signed certs for the metrics server. While convenient for development and testing,
 	// this setup is not recommended for production.
 	//
 	// TODO(user): If you enable certManager, uncomment the following lines:
-	// - [METRICS-WITH-CERTS] at config/default/kustomization.yaml to generate and use certificates
+	// - [METRICS-WITH-CERTS] at config/default/kustomization.yaml to generate and use certs
 	// managed by cert-manager for the metrics server.
 	// - [PROMETHEUS-WITH-CERTS] at config/prometheus/kustomization.yaml for TLS certification.
 	if len(metricsCertPath) > 0 {
-		setupLog.Info("Initializing metrics certificate watcher using provided certificates",
-			"metrics-cert-path", metricsCertPath,
-			"metrics-cert-name", metricsCertName,
-			"metrics-cert-key", metricsCertKey,
-		)
+		setupLog.Info("Initializing metrics cert watcher using provided certs",
+			"metrics-cert-path", metricsCertPath, "metrics-cert-name", metricsCertName, "metrics-cert-key", metricsCertKey)
 
 		metricsServerOptions.CertDir = metricsCertPath
 		metricsServerOptions.CertName = metricsCertName
@@ -169,7 +152,7 @@ func main() {
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
+		LeaderElection:         true,
 		LeaderElectionID:       "r8r.jnnkrdb.de",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
@@ -184,32 +167,32 @@ func main() {
 		// LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		setupLog.Error(err, "Failed to start manager")
 		os.Exit(1)
 	}
 
 	if err := (&controller.ClusterObjectReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("clusterobject-controller"),
+		Recorder: mgr.GetEventRecorder("clusterobject-controller"),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ClusterObject")
+		setupLog.Error(err, "Failed to create controller", "controller", "clusterobject")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
+		setupLog.Error(err, "Failed to set up health check")
 		os.Exit(1)
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
+		setupLog.Error(err, "Failed to set up ready check")
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	setupLog.Info("Starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+		setupLog.Error(err, "Failed to run manager")
 		os.Exit(1)
 	}
 }

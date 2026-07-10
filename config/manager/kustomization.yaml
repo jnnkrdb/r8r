@@ -1,9 +1,8 @@
 resources:
 - manager.yaml
-- namespace.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
 - name: controller
-  newName: ghcr.io/jnnkrdb/r8r
-  newTag: dev
+  newName: localhost:5000/jnnkrdb/r8r
+  newTag: local

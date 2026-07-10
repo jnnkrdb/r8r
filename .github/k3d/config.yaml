@@ -1,0 +1,25 @@
+---
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: r8r
+servers: 1
+agents: 2
+kubeAPI:
+  host: "localhost"
+  hostIP: "127.0.0.1"
+  hostPort: "6445"
+image: docker.io/rancher/k3s:v1.31.5-k3s1
+registries:
+  create:
+    name: reg-r8r
+    image: registry:2
+    host: "0.0.0.0"
+    hostPort: "5000"
+options:
+  k3d:
+    wait: true
+    timeout: "60s"
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true

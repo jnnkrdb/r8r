@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2017
+Copyright (c) 2025
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -31,33 +31,26 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/v1alpha1"
 )
 
 var _ = Describe("ClusterObject Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
-		const resourceNamespace = "test-namespace"
-
-		var testResource = unstructured.Unstructured{}
-		testResource.SetAPIVersion("v1")
-		testResource.SetKind("Secret")
-		testResource.SetName("test-secret")
-		testResource.SetNamespace("test-namespace")
+		const (
+			resourceName      = "test-resource"
+			resourceNamespace = "default"
+		)
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: resourceNamespace, // TODO(user):Modify as needed
+			Namespace: resourceNamespace,
 		}
-
 		clusterobject := &clusterv1alpha1.ClusterObject{}
 
 		BeforeEach(func() {
@@ -66,12 +59,10 @@ var _ = Describe("ClusterObject Controller", func() {
 			if err != nil && errors.IsNotFound(err) {
 				resource := &clusterv1alpha1.ClusterObject{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      typeNamespacedName.Name,
-						Namespace: typeNamespacedName.Namespace,
+						Name:      resourceName,
+						Namespace: resourceNamespace,
 					},
-					Replicator: clusterv1alpha1.ClusterObjectReplicator{
-						Resource: testResource,
-					},
+					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -86,13 +77,11 @@ var _ = Describe("ClusterObject Controller", func() {
 			By("Cleanup the specific resource instance ClusterObject")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
-
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &ClusterObjectReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Recorder: &record.FakeRecorder{},
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
