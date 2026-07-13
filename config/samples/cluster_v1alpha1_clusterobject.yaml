@@ -1,9 +1,0 @@
-apiVersion: cluster.jnnkrdb.de/v1alpha1
-kind: ClusterObject
-metadata:
-  labels:
-    app.kubernetes.io/name: r8r
-    app.kubernetes.io/managed-by: kustomize
-  name: clusterobject-sample
-spec:
-  # TODO(user): Add fields here
