@@ -1,0 +1,18 @@
+apiVersion: cluster.jnnkrdb.de/v1alpha1
+kind: ClusterObject
+metadata:
+  labels:
+    app.kubernetes.io/name: r8r
+    app.kubernetes.io/managed-by: kustomize
+  name: clusterobject-sample-1
+replicator:
+  labelSelector:
+    matchLabels:
+      controller: r8r
+  resource:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: myapp-1
+    data:
+      key: value
