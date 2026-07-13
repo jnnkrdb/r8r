@@ -1,5 +1,7 @@
 # Image URL to use all building/pushing image targets
-IMG ?= localhost:5000/jnnkrdb/r8r:local
+REPO ?= jnnkrdb/r8r:local
+IMG ?= reg-r8r:5000/${REPO}
+BUILD_IMG ?= localhost:5000/${REPO}
 # YEAR defines the year value used for substituting the YEAR placeholder in the boilerplate header.
 YEAR ?= $(shell date +%Y)
 
@@ -82,11 +84,11 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) build -t ${BUILD_IMG} .
 
 .PHONY: docker-push
-docker-push: docker-build k3d ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
+docker-push: docker-build ## Push docker image with the manager.
+	$(CONTAINER_TOOL) push ${BUILD_IMG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
