@@ -64,9 +64,10 @@ jobs:
           password: ${{ secrets.GHP_TOKEN }}
 
       - name: Sanitize Branchname for Tagging
+        id: sanitize
         run: |
           SANITIZED_BRANCH=$(echo "${BRANCH_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g')
-          echo "SANITIZED_BRANCH=$SANITIZED_BRANCH " >> $GITHUB_ENV
+          echo "branch=$SANITIZED_BRANCH" >> $GITHUB_OUTPUT
 
       - name: Build Image Push
         uses: docker/build-push-action@v5
@@ -74,7 +75,7 @@ jobs:
           context: "."
           file: ${{ env.DOCKERFILE }}
           tags: |
-            ${{ env.REPOSITORY }}:mgr.${{ env.SANITIZED_BRANCH }}
+            ${{ env.REPOSITORY }}:mgr.${{ steps.sanitize.outputs.branch }}
             ${{ env.REPOSITORY }}:mgr.${{ needs.version.outputs.semver }}
           push: ${{ github.event_name != 'pull_request' }}
           #build-args: |
