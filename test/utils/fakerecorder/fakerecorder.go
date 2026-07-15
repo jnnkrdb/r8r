@@ -21,12 +21,21 @@ func (f *FakeEventRecorder) record(reason, message string) {
 	f.Events = append(f.Events, fmt.Sprintf("%s: %s", reason, message))
 }
 
-func (f *FakeEventRecorder) Eventf(object, relatedObj runtime.Object, eventtype, related, reason, messageFmt string, args ...interface{}) {
+func (f *FakeEventRecorder) Eventf(
+	object, relatedObj runtime.Object,
+	eventtype, related, reason, messageFmt string,
+	args ...interface{}) {
+
 	msg := fmt.Sprintf(messageFmt, args...)
 	f.record(reason, msg)
 }
 
-func (f *FakeEventRecorder) PastEventf(object, relatedObj runtime.Object, timestamp v1.Time, eventtype, related, reason, messageFmt string, args ...interface{}) {
+func (f *FakeEventRecorder) PastEventf(
+	object, relatedObj runtime.Object,
+	timestamp v1.Time,
+	eventtype, related, reason, messageFmt string,
+	args ...interface{}) {
+
 	msg := fmt.Sprintf(messageFmt, args...)
 	f.record(reason, msg)
 }
