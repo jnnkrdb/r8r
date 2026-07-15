@@ -35,9 +35,9 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-      - command:
+      - args: []
+        command:
         - /r8r
-        args: []
         image: controller:latest
         name: manager
         ports:
