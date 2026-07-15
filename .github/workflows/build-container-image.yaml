@@ -18,7 +18,7 @@ env:
   GITVERSION_FILE: .github/gitversion/GitVersion.yml
   REPOSITORY: ghcr.io/jnnkrdb/r8r
   DOCKERFILE: ./Dockerfile
-  BRANCH_NAME: ${{ github.head_ref || github.ref_name }} 
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
 jobs:
   version:
