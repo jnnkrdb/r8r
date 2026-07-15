@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/v1alpha1"
-	"github.com/jnnkrdb/r8r/pkg/reconcilation"
+	"github.com/jnnkrdb/r8r/pkg/reconciliation"
 )
 
 // This function is used to handle the errors, whichget thrown by the reconciliation.
@@ -18,7 +18,7 @@ import (
 //   - ctx context.Contex -> this is the default given context
 //   - err error          -> this is the thrown error, which should be handled
 func OnError(
-	r reconcilation.Reconciler,
+	r reconciliation.Reconciler,
 	ctx context.Context,
 	co *clusterv1alpha1.ClusterObject,
 	err error,

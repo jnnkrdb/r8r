@@ -34,7 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -44,7 +43,7 @@ import (
 
 	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/v1alpha1"
 	"github.com/jnnkrdb/r8r/pkg/conditions"
-	"github.com/jnnkrdb/r8r/pkg/reconcilation/checks"
+	"github.com/jnnkrdb/r8r/pkg/reconciliation/checks"
 )
 
 // ClusterObjectReconciler reconciles a ClusterObject object
@@ -172,7 +171,7 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	for _, namespace := range namespaces.Items {
 		// reconcile the object for a specific namespace, if an error occurs, then throw reconcile error
 		if err := r.reconcileObjectForNamespace(
-			log.IntoContext(ctx, _log.WithValues(
+			logf.IntoContext(ctx, _log.WithValues(
 				"*clusterObject", *clusterObject,
 				"namespace.GetName()", namespace.GetName(),
 			)),
@@ -224,7 +223,7 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 	namespace corev1.Namespace,
 	requiredNamespaces *corev1.NamespaceList) error {
 
-	var _log = log.FromContext(ctx)
+	var _log = logf.FromContext(ctx)
 
 	_log.V(3).Info("check object")
 

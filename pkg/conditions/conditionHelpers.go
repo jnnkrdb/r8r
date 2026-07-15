@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/v1alpha1"
-	"github.com/jnnkrdb/r8r/pkg/reconcilation"
+	"github.com/jnnkrdb/r8r/pkg/reconciliation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -16,7 +16,7 @@ const (
 
 // handling conditions
 func Find(
-	r reconcilation.Reconciler,
+	r reconciliation.Reconciler,
 	ctx context.Context,
 	co *clusterv1alpha1.ClusterObject,
 	conditionType string) *metav1.Condition {
@@ -34,7 +34,7 @@ func Find(
 
 // set conditions
 func Set(
-	r reconcilation.Reconciler,
+	r reconciliation.Reconciler,
 	ctx context.Context,
 	co *clusterv1alpha1.ClusterObject,
 	conditionType string,
