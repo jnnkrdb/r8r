@@ -29,13 +29,18 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/v1alpha1"
+	"github.com/jnnkrdb/r8r/test/utils/fakerecorder"
 )
 
 var _ = Describe("ClusterObject Controller", func() {
@@ -53,6 +58,25 @@ var _ = Describe("ClusterObject Controller", func() {
 		}
 		clusterobject := &clusterv1alpha1.ClusterObject{}
 
+		// transform the resource to unstructured.Unstructured
+		m, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-configmap",
+				Namespace: resourceNamespace,
+			},
+			Data: map[string]string{
+				"key": "value",
+			},
+		})
+		if err != nil {
+			Fail("Failed to convert resource to unstructured: " + err.Error())
+		}
+		unstructuredResource := &unstructured.Unstructured{Object: m}
+		unstructuredResource.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "",
+			Version: "v1",
+			Kind:    "ConfigMap"})
+
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind ClusterObject")
 			err := k8sClient.Get(ctx, typeNamespacedName, clusterobject)
@@ -62,7 +86,14 @@ var _ = Describe("ClusterObject Controller", func() {
 						Name:      resourceName,
 						Namespace: resourceNamespace,
 					},
-					// TODO(user): Specify other spec details if needed.
+					Replicator: clusterv1alpha1.ClusterObjectReplicator{
+						LabelSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"app": "test-app",
+							},
+						},
+						Resource: *unstructuredResource,
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -77,11 +108,13 @@ var _ = Describe("ClusterObject Controller", func() {
 			By("Cleanup the specific resource instance ClusterObject")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &ClusterObjectReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: fakerecorder.NewFakeEventRecorder(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
