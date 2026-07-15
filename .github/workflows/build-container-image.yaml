@@ -7,10 +7,8 @@ on:
       - dev
     paths-ignore:
       - '.devcontainer/**'
-      - '.charts/**'
       - 'README.md'
       - 'LICENSE'
-      - 'VERSION'
   pull_request:
     branches: 
       - master 
@@ -20,7 +18,6 @@ env:
   GITVERSION_FILE: .github/gitversion/GitVersion.yml
   REPOSITORY: ghcr.io/jnnkrdb/r8r
   DOCKERFILE: ./Dockerfile
-  VERSION_FILE: ./VERSION
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }} 
 
 jobs:
@@ -59,11 +56,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: bash-version
-        run: |
-          echo ${{ needs.version.outputs.semver }} > ${{ env.VERSION_FILE }}
-          echo $(cat ${{ env.VERSION_FILE }})
-
       - name: Login to Github Packages
         uses: docker/login-action@v2
         with:
@@ -85,8 +77,8 @@ jobs:
             ${{ env.REPOSITORY }}:mgr.${{ env.SANITIZED_BRANCH }}
             ${{ env.REPOSITORY }}:mgr.${{ needs.version.outputs.semver }}
           push: ${{ github.event_name != 'pull_request' }}
-          build-args: |
-            VERSION=${{ needs.version.outputs.semver }}
-            BRANCH=${{ env.BRANCH_NAME }}
+          #build-args: |
+          #  VERSION=${{ needs.version.outputs.semver }}
+          #  BRANCH=${{ env.BRANCH_NAME }}
             
               
