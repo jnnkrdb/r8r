@@ -41,7 +41,7 @@ type ClusterObjectStatus struct {
 
 	// For Kubernetes API conventions, see:
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
-	status.DefaultStatusFields
+	status.DefaultStatusFields `json:",inline"`
 }
 
 // +kubebuilder:object:root=true

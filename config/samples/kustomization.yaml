@@ -7,4 +7,5 @@ resources:
 - cluster_v1alpha1_clusterobject-4.yaml
 - cluster_v1alpha1_clusterobject-5.yaml
 
+- r8r_v1beta1_simplereplicator.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

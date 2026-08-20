@@ -22,6 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the r8r itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- r8r_simplereplicator_admin_role.yaml
+- r8r_simplereplicator_editor_role.yaml
+- r8r_simplereplicator_viewer_role.yaml
 - clusterobject_admin_role.yaml
 - clusterobject_editor_role.yaml
 - clusterobject_viewer_role.yaml

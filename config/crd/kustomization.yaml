@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/cluster.jnnkrdb.de_clusterobjects.yaml
+- bases/r8r.jnnkrdb.de_simplereplicators.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

@@ -6,6 +6,7 @@ cliVersion: 4.15.0
 domain: jnnkrdb.de
 layout:
 - go.kubebuilder.io/v4
+multigroup: true
 projectName: r8r
 repo: github.com/jnnkrdb/r8r
 resources:
@@ -16,6 +17,15 @@ resources:
   domain: jnnkrdb.de
   group: cluster
   kind: ClusterObject
-  path: github.com/jnnkrdb/r8r/api/v1alpha1
+  path: github.com/jnnkrdb/r8r/api/cluster/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: jnnkrdb.de
+  group: r8r
+  kind: SimpleReplicator
+  path: github.com/jnnkrdb/r8r/api/r8r/v1beta1
+  version: v1beta1
 version: "3"
