@@ -35,8 +35,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/v1alpha1"
-	"github.com/jnnkrdb/r8r/internal/controller"
+	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/cluster/v1alpha1"
+	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
+	clustercontroller "github.com/jnnkrdb/r8r/internal/controller/cluster"
+	r8rcontroller "github.com/jnnkrdb/r8r/internal/controller/r8r"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -49,6 +51,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(clusterv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(r8rv1beta1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -171,12 +174,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.ClusterObjectReconciler{
+	if err := (&clustercontroller.ClusterObjectReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorder("clusterobject-controller"),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "clusterobject")
+		setupLog.Error(err, "Failed to create controller", "controller", "cluster-clusterobject")
+		os.Exit(1)
+	}
+	if err := (&r8rcontroller.SimpleReplicatorReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "r8r-simplereplicator")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

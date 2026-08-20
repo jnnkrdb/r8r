@@ -1,0 +1,9 @@
+apiVersion: r8r.jnnkrdb.de/v1beta1
+kind: SimpleReplicator
+metadata:
+  labels:
+    app.kubernetes.io/name: r8r
+    app.kubernetes.io/managed-by: kustomize
+  name: simplereplicator-sample
+spec:
+  # TODO(user): Add fields here
