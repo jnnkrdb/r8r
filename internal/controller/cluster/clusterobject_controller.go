@@ -61,7 +61,7 @@ func (r *ClusterObjectReconciler) GetRecorder() events.EventRecorder { return r.
 func (r *ClusterObjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&clusterv1alpha1.ClusterObject{}).
-		Named("clusterobject").
+		Named("cluster-clusterobject").
 		WithEventFilter(
 			predicate.Or(
 				predicate.GenerationChangedPredicate{},
