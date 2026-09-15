@@ -49,10 +49,17 @@ func (sh *StatusHandler) ThrowEvent(
 	sh.reconciler.GetRecorder().Eventf(sh.parent, relatedobject, string(eventtype), reason, action, note, args...)
 }
 
+// get the parent reconciler
+func (sh *StatusHandler) GetReconciler() reconciliation.Reconciler {
+	return sh.reconciler
+}
+
 // throws an event with a condtion afterwards
 //
 // parameters:
 //   - err error                   -> this is the thrown error, which should be handled
+//
+// if the given error is nil, then the func leaves early and returns nil as well
 func (sh *StatusHandler) ThrowEventWithConditionOnError(
 	err error,
 	relatedobject client.Object,
