@@ -41,6 +41,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
+	"github.com/jnnkrdb/r8r/pkg/reconciliation/actions"
 	"github.com/jnnkrdb/r8r/pkg/status"
 )
 
@@ -156,7 +157,65 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		)
 	}
 
-	// TODO: implement the logic to check for the required resources in the required namespaces and create/update/delete them as necessary.
+	// for every resource in the reources list, check if it has to be created/updated/deleted in any namespace
+	for _, _resource := range simpleReplicator.Resources {
+
+		// parse through all namespaces in the cluster and check, whether
+		// the object has to be created, updated or deleted from the namespace.
+		for _, _namespace := range namespaces.Items {
+
+			// TODO: implement the logic to check for the required resources in the required namespaces and create/update/delete them as necessary.
+			var rr = actions.ResourceRequest{
+				Namespace:     _namespace,
+				OwnerResource: simpleReplicator,
+				Resource:      _resource.DeepCopy(),
+			}
+
+			var currentLog = _log.V(3).WithValues(
+				"GroupVersionKind", rr.Resource.GroupVersionKind().String(),
+				"Name", rr.Resource.GetName(),
+				"Namespace", rr.Namespace.Name,
+			)
+
+			// verify whether an resource does exist and should exist
+			doesExist, err := rr.DoesExist(ctx, statushandler)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+			shouldExist, err := rr.ShouldExist(ctx, statushandler)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+			currentLog.Info("live-state/desired-state for resource calculated",
+				"shouldExist", shouldExist,
+				"doesExist", doesExist,
+			)
+
+			// case 1: resource should not exist and does not exist -> ignore
+			if !shouldExist && !doesExist {
+				currentLog.Info("nothing has to be done")
+				continue
+			}
+
+			// case 2: resource should exist, but does not exist -> create
+			if shouldExist && !doesExist {
+				if err := rr.Create(ctx, statushandler); err != nil {
+					return ctrl.Result{}, err
+				}
+				continue
+			}
+
+			// if the object does exist, and either should be updated or deleted,
+			// check if the owner is in fact the clusterobject
+			if !rr.IsControlled() {
+				_log.V(3).Info("object does not contain ownerreference")
+				continue
+			}
+
+		}
+	}
 
 	_log.Info("reconciled")
 
@@ -173,5 +232,4 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		Reason:  "ReplicatedResource",
 		Message: "successfully replicated resource among required namespaces",
 	})
-
 }
