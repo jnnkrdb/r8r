@@ -183,8 +183,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&r8rcontroller.SimpleReplicatorReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorder("r8r-simplereplicator-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "r8r-simplereplicator")
 		os.Exit(1)

@@ -2,9 +2,9 @@ package actions
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/jnnkrdb/r8r/pkg/status"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -15,8 +15,20 @@ func (rr *ResourceRequest) Update(ctx context.Context, statushandler *status.Sta
 
 	_log.Info("updating resource")
 
-	var _newResource = rr.Resource.DeepCopy()
-	_newResource.SetNamespace(rr.Namespace.Name)
+	rr.Resource.SetNamespace(rr.Namespace.Name)
 
-	return fmt.Errorf("not implemented")
+	if err := rr.SetControllerIfAny(statushandler); err != nil {
+		return err
+	}
+
+	err := statushandler.GetReconciler().GetClient().Update(ctx, rr.Resource, &client.UpdateOptions{})
+
+	return statushandler.ThrowEventWithConditionOnError(
+		err,
+		nil,
+		status.EventType_Warning,
+		"ObjectUpdate",
+		"Error Updating Object",
+		"error updating object in namespace: %v", err,
+	)
 }
