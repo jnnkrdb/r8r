@@ -14,3 +14,15 @@ type DefaultReplicationHandler struct {
 	scheme   *runtime.Scheme
 	recorder events.EventRecorder
 }
+
+// create a new default replication handler
+func NewReplicationHandler(c client.Client, scheme *runtime.Scheme, recorder events.EventRecorder) ReplicationHandler {
+
+	recover()
+
+	return DefaultReplicationHandler{
+		c:        c,
+		scheme:   scheme,
+		recorder: recorder,
+	}
+}
