@@ -214,6 +214,21 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				continue
 			}
 
+			// case 3: resource should exist and does exist and is owned by parent resources -> update
+			if shouldExist && doesExist {
+				if err := rr.Update(ctx, statushandler); err != nil {
+					return ctrl.Result{}, err
+				}
+				continue
+			}
+
+			// case 4: resource should not exist, does exist and is owned by parent resource -> delete
+			if !shouldExist && doesExist {
+				if err := rr.Delete(ctx, statushandler); err != nil {
+					return ctrl.Result{}, err
+				}
+				continue
+			}
 		}
 	}
 
