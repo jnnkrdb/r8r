@@ -26,6 +26,7 @@ package r8r
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,6 +42,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
+	"github.com/jnnkrdb/r8r/pkg/logger"
+	"github.com/jnnkrdb/r8r/pkg/reconciliation"
 	"github.com/jnnkrdb/r8r/pkg/reconciliation/actions"
 	"github.com/jnnkrdb/r8r/pkg/status"
 )
@@ -113,13 +116,22 @@ func (r *SimpleReplicatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.24.1/pkg/reconcile
 func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	var _log = logf.FromContext(ctx)
+	var _currLog = logf.FromContext(ctx)
 
 	var simpleReplicator = &r8rv1beta1.SimpleReplicator{}
 	if err := r.GetClient().Get(ctx, req.NamespacedName, simpleReplicator, &client.GetOptions{}); err != nil {
-		_log.Error(err, "error fetching object from cluster")
+		_currLog.Error(err, "error fetching object from cluster")
 		return ctrl.Result{}, err
 	}
+
+	// create the reconciliation handler
+	var reconciler = reconciliation.NewReconciliationHandler(ctx, r, simpleReplicator)
+
+	// create the event logger, that is able to raise events, when neccessary
+	// additionally add the logger to the current context
+	var eventLog = logger.NewEventLogger(r.GetRecorder(), _currLog, simpleReplicator)
+
+	ctx = logger.IntoContext(ctx, eventLog)
 
 	var statushandler = status.NewStatusHandler(
 		ctx,
@@ -128,33 +140,25 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		&simpleReplicator.Status.DefaultStatusFields,
 	)
 
-	_log.V(5).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
+	eventLog.V(5).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
 
 	// request a list of namespaces, to parse through the list and
 	// then check every namespace with the give item
 	var namespaces = &corev1.NamespaceList{}
-	if err := r.GetClient().List(ctx, namespaces, &client.ListOptions{}); err != nil {
-		return ctrl.Result{}, statushandler.ThrowEventWithConditionOnError(
-			err,
-			nil,
-			status.EventType_Warning,
-			"NamespaceGathering",
-			"Error Gathering Namespaces",
-			"error fetching list of namespaces from cluster: %v", err,
-		)
+	if err := reconciler.List(ctx, namespaces); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// create the labelseclector from the labelselector provided in the NamespaceSelector object.
+	labelselector, err := metav1.LabelSelectorAsSelector(simpleReplicator.Selector.LabelSelector)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error converting label selector: %w", err)
 	}
 
 	// request a list of namespaces, which are required to inherit the defined object
 	var requiredNamespaces = &corev1.NamespaceList{}
-	if err := simpleReplicator.Selector.GetNamespaces(ctx, r.GetClient(), requiredNamespaces); err != nil {
-		return ctrl.Result{}, statushandler.ThrowEventWithConditionOnError(
-			err,
-			nil,
-			status.EventType_Warning,
-			"NamespaceGathering",
-			"Error Gathering Namespaces",
-			"error fetching list of namespaces from cluster: %v", err,
-		)
+	if err := reconciler.List(ctx, requiredNamespaces, &client.ListOptions{LabelSelector: labelselector}); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// for every resource in the reources list, check if it has to be created/updated/deleted in any namespace
@@ -164,14 +168,13 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// the object has to be created, updated or deleted from the namespace.
 		for _, _namespace := range namespaces.Items {
 
-			// TODO: implement the logic to check for the required resources in the required namespaces and create/update/delete them as necessary.
 			var rr = actions.ResourceRequest{
 				Namespace:     _namespace,
 				OwnerResource: simpleReplicator,
 				Resource:      _resource.DeepCopy(),
 			}
 
-			var currentLog = _log.V(3).WithValues(
+			var currentLog = eventLog.V(3).WithValues(
 				"GroupVersionKind", rr.Resource.GroupVersionKind().String(),
 				"Name", rr.Resource.GetName(),
 				"Namespace", rr.Namespace.Name,
@@ -210,7 +213,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// if the object does exist, and either should be updated or deleted,
 			// check if the owner is in fact the clusterobject
 			if !rr.IsControlled() {
-				_log.V(3).Info("object does not contain ownerreference")
+				currentLog.Info("object does not contain ownerreference")
 				continue
 			}
 
@@ -232,14 +235,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
-	_log.Info("reconciled")
-
-	statushandler.ThrowEvent(
-		nil,
-		status.EventType_Normal,
-		"ReplicateResource",
-		"Replicated Resource",
-		"successfully created resource-replicas in required namespaces")
+	eventLog.InfoWithEvent("successfully created resource-replicas in required namespaces", logger.Event_SuccessfullResourceReplication)
 
 	return ctrl.Result{}, statushandler.SetCondition(metav1.Condition{
 		Type:    status.Condition_Complete,

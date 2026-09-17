@@ -13,32 +13,46 @@ const (
 	Warning EventType = "Warning"
 )
 
-// this struct is used to give eventOpts to the logger, to throw an event with specific values
-type EventOpts struct {
-	regarding runtime.Object
-	related   runtime.Object
-	EventType EventType
-	Reason    string
-	Action    string
-	note      string
-	args      []interface{}
+type EventOpts interface {
+	GetRelated() runtime.Object
+	GetEventType() EventType
+	GetAction() string
+	Throw(recorder events.EventRecorder, object client.Object, reason, note string, args ...any)
 }
 
-type IEventOpts interface {
-	throw(object client.Object, recorder events.EventRecorder)
+// this struct is used to give eventOpts to the logger, to throw an event with specific values
+type Event struct {
+	Related   runtime.Object
+	EventType EventType
+	Action    string
+}
+
+// get the related object
+func (e Event) GetRelated() runtime.Object {
+	return e.Related
+}
+
+// get the related object
+func (e Event) GetEventType() EventType {
+	return e.EventType
+}
+
+// get the related object
+func (e Event) GetAction() string {
+	return e.Action
 }
 
 // throw the event for the given object
-func (eo EventOpts) throw(object client.Object, recorder events.EventRecorder) {
+func (e Event) Throw(recorder events.EventRecorder, object client.Object, reason, note string, args ...any) {
 	if recorder != nil && object != nil {
 		recorder.Eventf(
 			object,
-			eo.related,
-			string(eo.EventType),
-			eo.Reason,
-			eo.Action,
-			eo.note,
-			eo.args...,
+			e.Related,
+			string(e.EventType),
+			reason,
+			e.Action,
+			note,
+			args...,
 		)
 	}
 }
