@@ -25,7 +25,6 @@ SOFTWARE.
 package v1beta1
 
 import (
-	"github.com/jnnkrdb/r8r/pkg/objects/selector"
 	"github.com/jnnkrdb/r8r/pkg/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -57,7 +56,10 @@ type SimpleReplicator struct {
 	metav1.ObjectMeta `json:"metadata,omitzero"`
 
 	// +required
-	Selector selector.NamespaceSelector `json:"namespaceSelector"`
+	Selector struct {
+		// +required
+		LabelSelector *metav1.LabelSelector `json:"labelSelector" protobuf:"bytes,4,opt,name=labelSelector"`
+	} `json:"namespaceSelector"`
 
 	// +kubebuilder:pruning:PreserveUnknownFields
 	// +required
