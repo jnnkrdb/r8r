@@ -1,0 +1,105 @@
+{{- $v := .Values -}}
+{{- $global := $v.global -}}
+{{- $main := $v -}}
+{{- $wl := $main.workload -}}
+{{- $pod := $main.pod -}}
+{{- $svc := $main.service -}}
+
+{{- if (eq (include "common.workloadKind" ( dict "kind" $wl.kind )) "StatefulSet") -}}
+{{- if not $wl.serviceName -}}
+--- # --------------------------------------------------------------------------------- Headless Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "common.fullname" . }}-headless
+  labels:
+    {{- include "common.defaultLabels" . | nindent 4 }}
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.labels 
+                          $main.labels ) ) | nindent 4 }}
+  annotations:
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.annotations 
+                          $main.annotations ) ) | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    {{- range $portName, $portSpecs := $svc.ports }}
+    - name: {{ $portName | quote }}
+      protocol: {{ $portSpecs.protocol }}
+      targetPort: {{ $portSpecs.port }}
+      port: {{ $portSpecs.port }}
+    {{- end }}
+  selector:
+    {{- include "common.defaultSelectorLabels" . | nindent 4 }}
+{{- end }}
+--- # --------------------------------------------------------------------------------- Statefulset
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "common.fullname" . }}
+  labels:
+    {{- include "common.defaultLabels" . | nindent 4 }}
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.labels 
+                          $main.labels 
+                          $wl.labels) ) | nindent 4 }}
+  annotations:
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.annotations 
+                          $main.annotations 
+                          $wl.annotations) ) | nindent 4 }}
+spec:
+  {{- if not $wl.serviceName }}
+  serviceName: {{ include "common.fullname" . }}-headless
+  {{- else }}
+  {{- with $wl.serviceName }}
+  serviceName: {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  {{- with $wl.replicaCount }}
+  replicas: {{ . }}
+  {{- end }}
+  {{- with $wl.revisionHistoryLimit }}
+  revisionHistoryLimit: {{ . }}
+  {{- end }}
+  {{- with $wl.minReadySeconds }}
+  minReadySeconds: {{ . }}
+  {{- end }}
+  {{- with $wl.podManagementPolicy }}
+  podManagementPolicy: {{ . }}
+  {{- end }}
+  {{- with $wl.persistentVolumeClaimRetentionPolicy }}
+  persistentVolumeClaimRetentionPolicy: 
+    {{- . | toYaml | nindent 4 }}
+  {{- end }}
+  {{- with $wl.volumeClaimTemplates }}
+  volumeClaimTemplates:
+    {{- . | toYaml | nindent 4 }}
+  {{- end }}
+  {{- with $wl.updateStrategy }}
+  updateStrategy:
+    {{- . | toYaml | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "common.defaultSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "common.keyValues" ( 
+            dict "kvs" ( list $global.annotations 
+                              $main.annotations 
+                              $wl.annotations
+                              $pod.annotations) ) | nindent 8 }}
+      labels: 
+        {{- include "common.defaultSelectorLabels" . | nindent 8 }}
+        {{- include "common.keyValues" ( 
+            dict "kvs" ( list $global.labels 
+                              $main.labels 
+                              $wl.labels
+                              $pod.labels) ) | nindent 8 }}
+    spec:
+      {{- include "zotregistry.pod" . | nindent 6 }}
+{{- end -}}

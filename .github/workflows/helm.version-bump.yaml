@@ -1,0 +1,11 @@
+name: Version Bump
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  chart-tests:
+    uses: jnnkrdb/helm-charts/.github/workflows/workflow.version-bump.yaml@main
+    with:
+      charts-path: .helm/charts

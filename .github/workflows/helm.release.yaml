@@ -1,0 +1,18 @@
+name: Release Charts
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - '.helm/charts/**'
+      - '.github/workflows/**'
+
+jobs:
+  release:
+    uses: jnnkrdb/helm-charts/.github/workflows/workflow.release.yaml@main
+    with:
+      charts-path: .helm/charts
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

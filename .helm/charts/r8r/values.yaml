@@ -1,0 +1,206 @@
+# --------------------------------------------------------------------------------------------------
+# GLOBAL CONFIGURATION
+global:
+  imagePullSecrets: []
+  imagePullPolicy: null
+  imageRegistry: null
+  labels: {}
+  annotations: {}
+  extraVolumes: []
+  extraVolumeMounts: []
+  extraDeploy: []
+
+# --------------------------------------------------------------------------------------------------
+# GENERAL CONFIGURATION
+labels: {}
+annotations: {}
+extraDeploy: []
+
+# --------------------------------------------------------------------------------------------------
+# CRDS CONFIGURATION
+crds:
+  enabled: true
+
+# --------------------------------------------------------------------------------------------------
+# IMAGE CONFIGURATION
+images:
+  r8r:
+    registry: ghcr.io
+    repository: jnnkrdb/r8r
+    tag: mgr.1.0.54
+    digest: null
+    imagePullPolicy: Always
+    imagePullSecrets: []
+
+# --------------------------------------------------------------------------------------------------
+# WORKLOAD CONFIGURATION
+workload:
+  annotations: {}
+  labels: {}
+  kind: Deployment
+  revisionHistoryLimit: 1
+  replicaCount: 1
+  minReadySeconds: 10
+  serviceName: null
+  podManagementPolicy: null
+  persistentVolumeClaimRetentionPolicy: null
+  progressDeadlineSeconds: null
+  volumeClaimTemplates: []
+  updateStrategy: {}
+
+# --------------------------------------------------------------------------------------------------
+# POD CONFIGURATION
+pod:
+  # ------------- more advanced configs
+  # Scheduling constraints
+  affinity: {}
+  tolerations: []
+  nodeSelector:
+    kubernetes.io/os: linux
+
+  # Network
+  hostNetwork: null
+  dnsPolicy: null
+  dnsConfig: {}
+  hostAliases: []
+
+  nodeName: null
+  hostname: null
+  subdomain: null
+  automountServiceAccountToken: null
+  terminationGracePeriodSeconds: 10
+
+  # Pod-level security context (applies to all containers unless container-level overrides)
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  # Runtime, priority, scheduler
+  runtimeClassName: null
+  priorityClassName: null
+  schedulerName: null
+
+  # Process & service-related settings
+  shareProcessNamespace: null
+  enableServiceLinks: null
+
+  # ------------- more frequently used configs
+  labels: {}
+  annotations: {}
+  imagePullSecrets: []
+  initContainers: []
+  extraVolumes: []
+  extraVolumeMounts: []
+  sidecarContainers: []
+  extraEnvs: []
+  extraEnvFrom: []
+
+# --------------------------------------------------------------------------------------------------
+# CONTAINER CONFIGURATION
+containers:
+  r8r:
+    command: []
+    args: []
+    workingDir: null
+    resources:
+      requests:
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+    securityContext:
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - "ALL"
+    extraEnvs: []
+    extraEnvFrom: []
+    extraVolumeMounts: []
+    startupProbe:
+      httpGet:
+        path: /healthz
+        port: health
+      timeoutSeconds: 1
+      periodSeconds: 5
+      successThreshold: 1
+      failureThreshold: 30
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: health
+      timeoutSeconds: 1
+      periodSeconds: 10
+      successThreshold: 1
+      failureThreshold: 10
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: health
+      timeoutSeconds: 1
+      periodSeconds: 10
+      successThreshold: 1
+      failureThreshold: 3
+
+# --------------------------------------------------------------------------------------------------
+# SERVICE CONFIGURATION
+service:
+  annotations: {}
+  labels: {}
+  type: ClusterIP
+  clusterIP: null
+  ports:
+    health:
+      port: 8081
+      protocol: TCP
+      nodePort: null
+      hostPort: null
+    metrics:
+      port: 8443
+      protocol: TCP
+      nodePort: null
+      hostPort: null
+  publishNotReadyAddresses: null
+  ipFamilyPolicy: null
+  ipFamilies: []
+
+# --------------------------------------------------------------------------------------------------
+# PDB CONFIGURATION
+pdb:
+  enabled: false
+  annotations: {}
+  labels: {}
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  minAvailable: null
+  maxUnavailable: 1
+
+# --------------------------------------------------------------------------------------------------
+# HORIZONTAL POD AUTOSCALER CONFIGURATION
+hpa:
+  enabled: false
+  annotations: {}
+  labels: {}
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+# --------------------------------------------------------------------------------------------------
+# RBAC CONFIGURATION
+rbac:
+  serviceAccount:
+    annotations: {}
+    labels: {}
+    automountServiceAccountToken: true
+  rules: []

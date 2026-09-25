@@ -1,0 +1,23 @@
+apiVersion: v2
+name: r8r
+description: A Helm chart for deploying jnnkrdb/r8r replication controller.
+type: application
+version: 1.0.0
+appVersion: mgr.1.0.54
+kubeVersion: ">=1.25.0-0"
+home: "https://github.com/jnnkrdb/helm-charts"
+maintainers:
+- name: jnnkrdb
+  url: https://github.com/jnnkrdb
+keywords:
+- r8r
+- replicator
+dependencies:
+- name: common
+  repository: "https://jnnkrdb.github.io/helm-charts"
+  version: 1.0.1
+- name: r8r-crds
+  repository: "file://charts/r8r-crds"
+  version: 1.0.0
+  alias: crds
+  condition: crds.enabled

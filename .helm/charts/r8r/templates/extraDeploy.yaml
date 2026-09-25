@@ -1,0 +1,11 @@
+{{- $v := .Values -}}
+{{- $global := $v.global -}}
+{{- $main := $v -}}
+{{- $extraDeploys := ( concat $global.extraDeploy
+                              $main.extraDeploy) -}}
+{{- if $extraDeploys }}
+{{- range $extraDeploys }}
+---
+{{ . | toYaml }}
+{{- end }}
+{{- end }}
