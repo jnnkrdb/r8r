@@ -1,0 +1,28 @@
+{{- $v := .Values -}}
+{{- $global := $v.global -}}
+{{- $main := $v -}}
+{{- $wl := $main.workload -}}
+{{- $pod := $main.pod -}}
+
+{{- if (eq (include "common.workloadKind" ( dict "kind" $wl.kind )) "Pod") -}}
+--- # --------------------------------------------------------------------------------- Pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "common.fullname" . }}
+  annotations:
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.annotations 
+                          $main.annotations 
+                          $wl.annotations
+                          $pod.annotations) ) | nindent 4 }}
+  labels: 
+    {{- include "common.defaultSelectorLabels" . | nindent 4 }}
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.labels 
+                          $main.labels 
+                          $wl.labels
+                          $pod.labels) ) | nindent 4 }}
+spec:
+  {{- include "zotregistry.pod" . | nindent 2 }}
+{{- end -}}

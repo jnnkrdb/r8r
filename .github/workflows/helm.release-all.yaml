@@ -1,0 +1,20 @@
+name: Release All Changed Charts
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - '.helm/charts/**'
+
+jobs:
+  chart-tests:
+    uses: jnnkrdb/helm-charts/.github/workflows/workflow.release-all.yaml@main
+    with:
+      charts-path: .helm/charts
+      registry: ghcr.io
+      registry-username: ${{ github.actor }}
+      registry-repopath: ${{ github.repository_owner }}/helm-charts
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
