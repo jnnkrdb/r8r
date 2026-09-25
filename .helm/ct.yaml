@@ -1,6 +1,6 @@
 # ct.yaml
 remote: origin
-target-branch: main
+target-branch: master
 chart-dirs:
 - .helm/charts
 chart-repos: []
