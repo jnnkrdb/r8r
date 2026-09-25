@@ -101,5 +101,5 @@ spec:
                               $wl.labels
                               $pod.labels) ) | nindent 8 }}
     spec:
-      {{- include "zotregistry.pod" . | nindent 6 }}
+      {{- include "r8r.pod" . | nindent 6 }}
 {{- end -}}
