@@ -1,4 +1,4 @@
-name: Version Bump
+name: Helm - Version Bump
 
 on:
   pull_request:
