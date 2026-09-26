@@ -131,8 +131,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// additionally add the logger to the current context
 	var eventLog = logger.NewEventLogger(r.GetRecorder(), _currLog, simpleReplicator)
 
-	ctx = logger.IntoContext(ctx, eventLog)
-
 	var statushandler = status.NewStatusHandler(
 		ctx,
 		r,
