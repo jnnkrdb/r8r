@@ -56,10 +56,7 @@ type SimpleReplicator struct {
 	metav1.ObjectMeta `json:"metadata,omitzero"`
 
 	// +required
-	Selector struct {
-		// +required
-		LabelSelector *metav1.LabelSelector `json:"labelSelector" protobuf:"bytes,4,opt,name=labelSelector"`
-	} `json:"namespaceSelector"`
+	Selector Selector `json:"namespaceSelector"`
 
 	// +kubebuilder:pruning:PreserveUnknownFields
 	// +required
@@ -84,4 +81,9 @@ func init() {
 		s.AddKnownTypes(SchemeGroupVersion, &SimpleReplicator{}, &SimpleReplicatorList{})
 		return nil
 	})
+}
+
+type Selector struct {
+	// +required
+	LabelSelector *metav1.LabelSelector `json:"labelSelector" protobuf:"bytes,4,opt,name=labelSelector"`
 }
