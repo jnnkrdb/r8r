@@ -1,5 +1,7 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+bin/**
+
 # helm dependency charts
 .helm/charts/*/charts/*.tgz
