@@ -1,0 +1,30 @@
+name: Helm - Lint and Test
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.helm/**'
+      - '.github/workflows/helm.lint-test.yaml'
+  pull_request:
+    paths:
+      - '.helm/**'
+      - '.github/workflows/helm.lint-test.yaml'
+
+jobs:
+  chart-tests:
+    uses: jnnkrdb/helm-charts/.github/workflows/workflow.chart-tests.yaml@main
+    with:
+      run-lint: true
+      run-template: true
+      run-unittests: true
+      run-policytests: true
+      run-integrationtests: true
+      charts-path: .helm/charts
+      chart-test-yaml: .helm/ct.yaml
+      templatevalues-subdir: .values
+      unittests-subdir: .unittests
+      unittests-filefilter: '*.unit.yaml'
+      policies-subdir: .policies
+      policies-general-dir: .helm/policies

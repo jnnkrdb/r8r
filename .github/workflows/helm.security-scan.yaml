@@ -1,0 +1,15 @@
+name: Helm - Security Scan
+
+on:
+  push:
+    paths:
+      - '.helm/charts/**'
+  pull_request:
+    paths:
+      - '.helm/charts/**'
+
+jobs:
+  chart-tests:
+    uses: jnnkrdb/helm-charts/.github/workflows/workflow.security-scan.yaml@main
+    with:
+      charts-path: .helm/charts

@@ -1,0 +1,10 @@
+# ct.yaml
+remote: origin
+target-branch: master
+chart-dirs:
+- .helm/charts
+chart-repos: []
+helm-extra-args: --timeout 600s
+validate-maintainers: false
+check-version-increment: true
+validate-chart-schema: true

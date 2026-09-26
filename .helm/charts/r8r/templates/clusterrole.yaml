@@ -1,0 +1,35 @@
+{{- $v := .Values -}}
+{{- $global := $v.global -}}
+{{- $main := $v -}}
+{{- $rbac := $v.rbac -}}
+
+--- # --------------------------------------------------------------------------------- ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "common.fullname" . }}
+  labels:
+    {{- include "common.defaultLabels" . | nindent 4 }}
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.labels 
+                          $main.labels ) ) | nindent 4 }}
+  annotations:
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.annotations 
+                          $main.annotations ) ) | nindent 4 }}
+rules:
+- apiGroups: [ "" ]
+  resources: [ events ]
+  verbs: [ create, patch ]
+- apiGroups: [ cluster.jnnkrdb.de ]
+  resources: [ clusterobjects ]
+  verbs: [ create, delete, get, list, patch, update, watch ]
+- apiGroups: [ cluster.jnnkrdb.de ]
+  resources: [ clusterobjects/finalizers ]
+  verbs: [ update ]
+- apiGroups: [ cluster.jnnkrdb.de ]
+  resources: [ clusterobjects/status ]
+  verbs: [ get, patch, update ]
+{{- with $rbac.rules }}
+{{- . | toYaml }}
+{{- end }}
