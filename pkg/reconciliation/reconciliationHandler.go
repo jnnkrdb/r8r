@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jnnkrdb/r8r/pkg/logger"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -157,4 +158,18 @@ func (rh *ReconciliationHandler) Delete(ctx context.Context, obj client.Object, 
 	}
 
 	return nil
+}
+
+// check whether an object exists or not
+func (rh *ReconciliationHandler) DoesObjectExist(ctx context.Context, obj client.Object) (bool, error) {
+
+	if err := rh.Get(ctx, types.NamespacedName{
+		Namespace: obj.GetNamespace(),
+		Name:      obj.GetName(),
+	}, obj); err != nil {
+
+		return false, client.IgnoreNotFound(err)
+	}
+
+	return true, nil
 }
