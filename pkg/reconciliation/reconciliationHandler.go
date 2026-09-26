@@ -4,34 +4,26 @@ import (
 	"context"
 
 	"github.com/jnnkrdb/r8r/pkg/logger"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-// this implements the reconciler interface, which enables some
-// methods to get all possible reconcilers, if required
-type ReconcilerDefinition interface {
-	GetClient() client.Client
-	GetScheme() *runtime.Scheme
-	GetRecorder() events.EventRecorder
-}
 
 // this struct is made to simplify the requests, which will be made during a reconciliation loop
 // since there are multiple requests, which will be done during a reconciliation, which may
 // may be duplicated, this handler contains a predefined request, which can be used
 type ReconciliationHandler struct {
-	reconciler ReconcilerDefinition
+	reconciler Reconciler
 	eventLog   logger.EventHandler
 	Obj        client.Object
 }
 
 // create a new handler instance from a given reconciler
-func NewReconciliationHandler(ctx context.Context, rd ReconcilerDefinition, pObj client.Object) *ReconciliationHandler {
+func NewReconciliationHandler(ctx context.Context, rd Reconciler, pObj client.Object) *ReconciliationHandler {
 
 	return &ReconciliationHandler{
 		reconciler: rd,
 		Obj:        pObj,
+		eventLog:   logger.NewEventLogger(rd.GetRecorder(), logf.FromContext(ctx), pObj),
 	}
 }
 
