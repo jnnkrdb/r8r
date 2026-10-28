@@ -42,7 +42,7 @@ func (rh *ReconciliationHandler) List(ctx context.Context, list client.ObjectLis
 
 		// throw an event
 		rh.reconciler.GetRecorder().Eventf(
-			rh.Obj, list, "Waring", "FailedObjectListFetching", "FetchingObjectList",
+			rh.Obj, list, "Warning", "FailedObjectListFetching", "FetchingObjectList",
 			fmt.Sprintf("Unable to fetch a list of object [%s], due to following error: %s",
 				list.GetObjectKind().GroupVersionKind().String(),
 				err.Error(),
@@ -70,7 +70,7 @@ func (rh *ReconciliationHandler) Get(ctx context.Context, key client.ObjectKey, 
 
 		// throw an event
 		rh.reconciler.GetRecorder().Eventf(
-			rh.Obj, obj, "Waring", "FailedObjectFetching", "FetchingObject",
+			rh.Obj, obj, "Warning", "FailedObjectFetching", "FetchingObject",
 			fmt.Sprintf("Unable to fetch an object [%s@%s/%s], due to following error: %s",
 				obj.GetObjectKind().GroupVersionKind().String(), key.Namespace, key.Name,
 				err.Error(),
@@ -96,7 +96,7 @@ func (rh *ReconciliationHandler) Create(ctx context.Context, obj client.Object, 
 
 		// throw an event
 		rh.reconciler.GetRecorder().Eventf(
-			rh.Obj, obj, "Waring", "FailedObjectCreation", "CreatingObject",
+			rh.Obj, obj, "Warning", "FailedObjectCreation", "CreatingObject",
 			fmt.Sprintf("Unable to create an object [%s@%s/%s], due to following error: %s",
 				obj.GetObjectKind().GroupVersionKind().String(), obj.GetNamespace(), obj.GetName(),
 				err.Error(),
@@ -122,7 +122,7 @@ func (rh *ReconciliationHandler) Update(ctx context.Context, obj client.Object, 
 
 		// throw an event
 		rh.reconciler.GetRecorder().Eventf(
-			rh.Obj, obj, "Waring", "FailedObjectUpdate", "UpdatingObject",
+			rh.Obj, obj, "Warning", "FailedObjectUpdate", "UpdatingObject",
 			fmt.Sprintf("Unable to update an object [%s@%s/%s], due to following error: %s",
 				obj.GetObjectKind().GroupVersionKind().String(), obj.GetNamespace(), obj.GetName(),
 				err.Error(),
@@ -148,7 +148,7 @@ func (rh *ReconciliationHandler) Delete(ctx context.Context, obj client.Object, 
 
 		// throw an event
 		rh.reconciler.GetRecorder().Eventf(
-			rh.Obj, obj, "Waring", "FailedObjectDeletion", "DeletingObject",
+			rh.Obj, obj, "Warning", "FailedObjectDeletion", "DeletingObject",
 			fmt.Sprintf("Unable to delete an object [%s@%s/%s], due to following error: %s",
 				obj.GetObjectKind().GroupVersionKind().String(), obj.GetNamespace(), obj.GetName(),
 				err.Error(),
