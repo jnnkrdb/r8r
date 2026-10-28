@@ -46,6 +46,7 @@ type SimpleReplicatorStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 
 // SimpleReplicator is the Schema for the simplereplicators API
 type SimpleReplicator struct {
