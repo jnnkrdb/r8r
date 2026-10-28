@@ -28,7 +28,12 @@ func NewReconciliationHandler(ctx context.Context, rd Reconciler, pObj client.Ob
 	}
 }
 
-// generic list function
+// raw list function
+func (rh *ReconciliationHandler) ListRaw(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return rh.reconciler.GetClient().List(ctx, list, opts...)
+}
+
+// generic list function, with event handling and logging in relation to the parent object
 func (rh *ReconciliationHandler) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 
 	var _currLog = logf.FromContext(ctx).WithValues(
@@ -36,7 +41,7 @@ func (rh *ReconciliationHandler) List(ctx context.Context, list client.ObjectLis
 		"listObject-GroupVersionKind", list.GetObjectKind().GroupVersionKind().String(),
 	)
 
-	if err := rh.reconciler.GetClient().List(ctx, list, opts...); err != nil {
+	if err := rh.ListRaw(ctx, list, opts...); err != nil {
 
 		_currLog.Error(err, "failed to fetch list of object")
 
@@ -55,7 +60,12 @@ func (rh *ReconciliationHandler) List(ctx context.Context, list client.ObjectLis
 	return nil
 }
 
-// generic get function
+// raw get function
+func (rh *ReconciliationHandler) GetRaw(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	return rh.reconciler.GetClient().Get(ctx, key, obj, opts...)
+}
+
+// generic get function, with event handling and logging in relation to the parent object
 func (rh *ReconciliationHandler) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 
 	var _currLog = logf.FromContext(ctx).WithValues(
@@ -64,7 +74,7 @@ func (rh *ReconciliationHandler) Get(ctx context.Context, key client.ObjectKey, 
 		"object-NamespaceName", key.String(),
 	)
 
-	if err := rh.reconciler.GetClient().Get(ctx, key, obj, opts...); err != nil {
+	if err := rh.GetRaw(ctx, key, obj, opts...); err != nil {
 
 		_currLog.Error(err, "failed to fetch object")
 
@@ -82,7 +92,12 @@ func (rh *ReconciliationHandler) Get(ctx context.Context, key client.ObjectKey, 
 	return nil
 }
 
-// generic create function
+// raw create function
+func (rh *ReconciliationHandler) CreateRaw(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	return rh.reconciler.GetClient().Create(ctx, obj, opts...)
+}
+
+// generic create function, with event handling and logging in relation to the parent object
 func (rh *ReconciliationHandler) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 
 	var _currLog = logf.FromContext(ctx).WithValues(
@@ -90,7 +105,7 @@ func (rh *ReconciliationHandler) Create(ctx context.Context, obj client.Object, 
 		"object-GroupVersionKind", obj.GetObjectKind().GroupVersionKind().String(),
 	)
 
-	if err := rh.reconciler.GetClient().Create(ctx, obj, opts...); err != nil {
+	if err := rh.CreateRaw(ctx, obj, opts...); err != nil {
 
 		_currLog.Error(err, "failed to create object")
 
@@ -108,7 +123,12 @@ func (rh *ReconciliationHandler) Create(ctx context.Context, obj client.Object, 
 	return nil
 }
 
-// generic update function
+// raw update function
+func (rh *ReconciliationHandler) UpdateRaw(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	return rh.reconciler.GetClient().Update(ctx, obj, opts...)
+}
+
+// generic update function, with event handling and logging in relation to the parent object
 func (rh *ReconciliationHandler) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 
 	var _currLog = logf.FromContext(ctx).WithValues(
@@ -116,7 +136,7 @@ func (rh *ReconciliationHandler) Update(ctx context.Context, obj client.Object, 
 		"object-GroupVersionKind", obj.GetObjectKind().GroupVersionKind().String(),
 	)
 
-	if err := rh.reconciler.GetClient().Update(ctx, obj, opts...); err != nil {
+	if err := rh.UpdateRaw(ctx, obj, opts...); err != nil {
 
 		_currLog.Error(err, "failed to update object")
 
@@ -134,6 +154,12 @@ func (rh *ReconciliationHandler) Update(ctx context.Context, obj client.Object, 
 	return nil
 }
 
+// raw delete function
+func (rh *ReconciliationHandler) DeleteRaw(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	return rh.reconciler.GetClient().Delete(ctx, obj, opts...)
+}
+
+// generic delete function, with event handling and logging in relation to the parent object
 // generic delete function
 func (rh *ReconciliationHandler) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 
@@ -142,7 +168,7 @@ func (rh *ReconciliationHandler) Delete(ctx context.Context, obj client.Object, 
 		"object-GroupVersionKind", obj.GetObjectKind().GroupVersionKind().String(),
 	)
 
-	if err := rh.reconciler.GetClient().Delete(ctx, obj, opts...); err != nil {
+	if err := rh.DeleteRaw(ctx, obj, opts...); err != nil {
 
 		_currLog.Error(err, "failed to delete object")
 
@@ -163,7 +189,7 @@ func (rh *ReconciliationHandler) Delete(ctx context.Context, obj client.Object, 
 // check whether an object exists or not
 func (rh *ReconciliationHandler) DoesObjectExist(ctx context.Context, obj client.Object) (bool, error) {
 
-	if err := rh.Get(ctx, types.NamespacedName{
+	if err := rh.GetRaw(ctx, types.NamespacedName{
 		Namespace: obj.GetNamespace(),
 		Name:      obj.GetName(),
 	}, obj); err != nil {
