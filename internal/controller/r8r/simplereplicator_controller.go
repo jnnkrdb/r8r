@@ -135,6 +135,14 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	_currLog.V(5).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
 
+	// create the labelseclector from the labelselector provided in the NamespaceSelector object.
+	labelselector, err := metav1.LabelSelectorAsSelector(simpleReplicator.Selector.LabelSelector)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error converting label selector: %w", err)
+	}
+
+	_currLog.V(5).Info("LabelSelector", "labelselector", labelselector)
+
 	// request a list of namespaces, to parse through the list and
 	// then check every namespace with the give item
 	var namespaces = &corev1.NamespaceList{}
@@ -142,17 +150,16 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	// create the labelseclector from the labelselector provided in the NamespaceSelector object.
-	labelselector, err := metav1.LabelSelectorAsSelector(simpleReplicator.Selector.LabelSelector)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error converting label selector: %w", err)
-	}
-
 	// request a list of namespaces, which are required to inherit the defined object
 	var requiredNamespaces = &corev1.NamespaceList{}
 	if err := reconciler.List(ctx, requiredNamespaces, &client.ListOptions{LabelSelector: labelselector}); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	_currLog.V(5).Info("gathered namespaceLists",
+		"namespaces.Items", namespaces.Items,
+		"requiredNamespaces.Items", requiredNamespaces.Items,
+	)
 
 	// for every resource in the reources list, check if it has to be created/updated/deleted in any namespace
 	for _, _resource := range simpleReplicator.Resources {
