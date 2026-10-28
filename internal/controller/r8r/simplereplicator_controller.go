@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -41,6 +42,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
 	"github.com/jnnkrdb/r8r/pkg/reconciliation"
@@ -163,6 +165,34 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// for every resource in the reources list, check if it has to be created/updated/deleted in any namespace
 	for _, _resource := range simpleReplicator.Resources {
+
+		// prepare the Listoptions with the labelselector
+		var unstructuredListListOptions = &client.ListOptions{}
+		if uls, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"r8r.jnnkrdb.de/ownedBy": string(simpleReplicator.GetUID()),
+			},
+		}); err != nil {
+			_currLog.V(5).Error(err, "creating labelselector for unstructuredResourceList",
+				"unstructuredListListOptions", unstructuredListListOptions,
+				"uls", uls,
+			)
+		} else {
+			unstructuredListListOptions.LabelSelector = uls
+		}
+
+		// get resources, that are directly linked to the simplereplicator, due to set labels
+		var unstructuredList = &unstructured.UnstructuredList{}
+		unstructuredList.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   _resource.GroupVersionKind().Group,
+			Version: _resource.GroupVersionKind().Version,
+			Kind:    _resource.GroupVersionKind().Kind + "List",
+		})
+		if err := reconciler.List(ctx, unstructuredList, unstructuredListListOptions); err != nil {
+			// zur kenntnis genommen
+		}
+
+		_currLog.V(5).Info("received list of resource", "unstructuredList", unstructuredList)
 
 		// parse through all namespaces in the cluster and check, whether
 		// the object has to be created, updated or deleted from the namespace.
