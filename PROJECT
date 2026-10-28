@@ -12,7 +12,7 @@ repo: github.com/jnnkrdb/r8r
 resources:
 - api:
     crdVersion: v1
-    namespaced: true
+    namespaced: false
   controller: true
   domain: jnnkrdb.de
   group: cluster
@@ -21,7 +21,7 @@ resources:
   version: v1alpha1
 - api:
     crdVersion: v1
-    namespaced: true
+    namespaced: false
   controller: true
   domain: jnnkrdb.de
   group: r8r
