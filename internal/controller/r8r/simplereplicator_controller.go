@@ -45,8 +45,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
-	"github.com/jnnkrdb/r8r/internal/validator"
 	"github.com/jnnkrdb/r8r/pkg/reconciliation"
+	lbls "github.com/jnnkrdb/r8r/pkg/reconciliation/labels"
+	validator "github.com/jnnkrdb/r8r/pkg/reconciliation/labels"
 	"github.com/jnnkrdb/r8r/pkg/status"
 )
 
@@ -170,7 +171,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// prepare the Listoptions with the labelselector
 		var unstructuredListListOptions = &client.ListOptions{}
 		if uls, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-			MatchLabels: validator.OwnerLabels(_resource.GetLabels(), simpleReplicator),
+			MatchLabels: lbls.OwnerLabels(_resource.GetLabels(), simpleReplicator),
 		}); err != nil {
 			_currLog.V(5).Error(err, "creating labelselector for unstructuredResourceList",
 				"unstructuredListListOptions", unstructuredListListOptions,
