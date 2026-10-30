@@ -192,7 +192,10 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// zur kenntnis genommen
 		}
 
-		_currLog.V(5).Info("received list of resource", "unstructuredList", unstructuredList)
+		_currLog.V(5).Info("received list of resource",
+			"unstructuredList", unstructuredList,
+			"unstructuredListListOptions", unstructuredListListOptions,
+		)
 
 		// parse through all namespaces in the cluster and check, whether
 		// the object has to be created, updated or deleted from the namespace.
