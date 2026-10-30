@@ -29,14 +29,17 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/v1alpha1"
-	"github.com/jnnkrdb/r8r/internal/controller"
+	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/cluster/v1alpha1"
+	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
+	clustercontroller "github.com/jnnkrdb/r8r/internal/controller/cluster"
+	r8rcontroller "github.com/jnnkrdb/r8r/internal/controller/r8r"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -49,6 +52,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(clusterv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(r8rv1beta1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -60,6 +64,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var cacheUnstructured bool
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8443", "The address the metrics endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -71,6 +76,8 @@ func main() {
 	flag.StringVar(&metricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server cert file.")
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false, "If set, HTTP/2 will be enabled for metrics and webhook servers")
+	flag.BoolVar(&cacheUnstructured, "disable-cache-unstructured", true,
+		"If set, the cache for unstructured objects will be disabled. This results in live-updates on every request.")
 
 	opts := zap.Options{
 		Development: true,
@@ -152,8 +159,13 @@ func main() {
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         true,
-		LeaderElectionID:       "r8r.jnnkrdb.de",
+		Client: client.Options{
+			Cache: &client.CacheOptions{
+				Unstructured: cacheUnstructured,
+			},
+		},
+		LeaderElection:   true,
+		LeaderElectionID: "r8r.jnnkrdb.de",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -171,12 +183,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.ClusterObjectReconciler{
+	if err := (&clustercontroller.ClusterObjectReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorder("clusterobject-controller"),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "clusterobject")
+		setupLog.Error(err, "Failed to create controller", "controller", "cluster-clusterobject")
+		os.Exit(1)
+	}
+	if err := (&r8rcontroller.SimpleReplicatorReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorder("r8r-simplereplicator-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "r8r-simplereplicator")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

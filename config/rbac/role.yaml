@@ -49,3 +49,29 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - r8r.jnnkrdb.de
+  resources:
+  - simplereplicators
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - r8r.jnnkrdb.de
+  resources:
+  - simplereplicators/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - r8r.jnnkrdb.de
+  resources:
+  - simplereplicators/status
+  verbs:
+  - get
+  - patch
+  - update

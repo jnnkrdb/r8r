@@ -1,0 +1,13 @@
+apiVersion: v2
+name: r8r-crds
+description: A Helm chart for deploying r8r's Custom Resource Definitions (CRDs).
+type: application
+version: 1.0.0
+home: "https://github.com/jnnkrdb/helm-charts"
+maintainers:
+- name: jnnkrdb
+  url: https://github.com/jnnkrdb
+keywords:
+- r8r
+- replicator
+- crds
