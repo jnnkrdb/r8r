@@ -203,4 +203,16 @@ rbac:
     annotations: {}
     labels: {}
     automountServiceAccountToken: true
-  rules: []
+  rules:
+  - apiGroups:
+    - '*'
+    resources:
+    - '*'
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch

@@ -18,18 +18,65 @@ metadata:
         dict "kvs" ( list $global.annotations 
                           $main.annotations ) ) | nindent 4 }}
 rules:
-- apiGroups: [ "" ]
-  resources: [ events ]
-  verbs: [ create, patch ]
-- apiGroups: [ cluster.jnnkrdb.de ]
-  resources: [ clusterobjects ]
-  verbs: [ create, delete, get, list, patch, update, watch ]
-- apiGroups: [ cluster.jnnkrdb.de ]
-  resources: [ clusterobjects/finalizers ]
-  verbs: [ update ]
-- apiGroups: [ cluster.jnnkrdb.de ]
-  resources: [ clusterobjects/status ]
-  verbs: [ get, patch, update ]
-{{- with $rbac.rules }}
-{{- . | toYaml }}
-{{- end }}
+  # manage events
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  # cluster.jnnkrdb.de - ClusterObject
+  - apiGroups:
+      - cluster.jnnkrdb.de
+    resources:
+      - clusterobjects
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - cluster.jnnkrdb.de
+    resources:
+      - clusterobjects/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - cluster.jnnkrdb.de
+    resources:
+      - clusterobjects/status
+    verbs:
+      - get
+      - patch
+      - update
+  # r8r.jnnkrdb.de - SimpleReplicator
+  - apiGroups:
+      - r8r.jnnkrdb.de
+    resources:
+      - simplereplicators
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - r8r.jnnkrdb.de
+    resources:
+      - simplereplicators/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - r8r.jnnkrdb.de
+    resources:
+      - simplereplicators/status
+    verbs:
+      - get
+      - patch
+      - update
