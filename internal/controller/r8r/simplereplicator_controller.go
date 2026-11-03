@@ -45,6 +45,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
+	"github.com/jnnkrdb/r8r/pkg/generics"
 	"github.com/jnnkrdb/r8r/pkg/reconciliation"
 	lbls "github.com/jnnkrdb/r8r/pkg/reconciliation/labels"
 	validator "github.com/jnnkrdb/r8r/pkg/reconciliation/labels"
@@ -189,7 +190,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			Kind:    _resource.GroupVersionKind().Kind + "List",
 		})
 		if err := reconciler.List(ctx, unstructuredList, unstructuredListListOptions); err != nil {
-			// zur kenntnis genommen
+			return ctrl.Result{}, err
 		}
 
 		_currLog.V(5).Info("received list of resource",
@@ -197,20 +198,29 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"unstructuredListListOptions", unstructuredListListOptions,
 		)
 
+		// parse the list to a map type to check like in a hashmap
+		hashMap := generics.UnstructuredListToHashmap(unstructuredList, func(o unstructured.Unstructured) string {
+			return o.GetNamespace() + "/" + o.GetName()
+		})
+
 		// parse through all namespaces in the cluster and check, whether
 		// the object has to be created, updated or deleted from the namespace.
 		for _, _namespace := range namespaces.Items {
 
 			// prepare destinationResource pointer for checks
-			destinationResource := _resource.DeepCopy()
+			var destinationResource = _resource.DeepCopy()
 			destinationResource.SetNamespace(_namespace.Name)
 			destinationResource.SetLabels(validator.OwnerLabels(_resource.GetLabels(), simpleReplicator))
 
 			var currentLog = _currLog.V(3).WithValues(
 				"GroupVersionKind", destinationResource.GroupVersionKind().String(),
 				"Name", destinationResource.GetName(),
-				"Namespace", _namespace.Name,
+				"Namespace", destinationResource.GetNamespace(),
 			)
+
+			if obj, doesExist := hashMap[destinationResource.GetNamespace()+"/"+destinationResource.GetName()]; doesExist {
+				currentLog.V(5).Info("object exists in hashmap", "obj", obj)
+			}
 
 			// verify whether an resource does exist and should exist
 			doesExist, err := reconciler.DoesObjectExist(ctx, destinationResource)
