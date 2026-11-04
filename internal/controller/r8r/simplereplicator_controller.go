@@ -26,7 +26,6 @@ package r8r
 
 import (
 	"context"
-	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -123,42 +122,23 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	_baseLog.Info("reconciling SimpleReplicator object", "req", req)
 
+	// create cached object of requested resource
 	var simpleReplicator = &r8rv1beta1.SimpleReplicator{}
 	if err := r.GetClient().Get(ctx, req.NamespacedName, simpleReplicator, &client.GetOptions{}); err != nil {
 		_baseLog.Error(err, "error fetching object from cluster")
 		return ctrl.Result{}, err
 	}
-
-	var e = fmt.Errorf("test error")
-	_baseLog.V(0).Error(e, "test")
-	_baseLog.V(1).Error(e, "test")
-	_baseLog.V(2).Error(e, "test")
-	_baseLog.V(3).Error(e, "test")
-	_baseLog.V(4).Error(e, "test")
-	_baseLog.V(5).Error(e, "test")
-	_baseLog.V(6).Error(e, "test")
-	_baseLog.V(7).Error(e, "test")
-	if e != nil {
-		return ctrl.Result{}, e
-	}
-
 	_baseLog.V(5).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
 
 	// create the reconciliation handler
 	var reconciler = reconciliation.NewReconciliationHandler(ctx, r, simpleReplicator)
 	_baseLog.V(5).Info("initialized reconciler", "*reconciler", *reconciler)
 
-	//var statushandler = status.NewStatusHandler(
-	//	ctx,
-	//	r,
-	//	simpleReplicator,
-	//	&simpleReplicator.Status.DefaultStatusFields,
-	//)
-
 	// create the labelseclector from the labelselector provided in the NamespaceSelector object.
 	labelselector, err := metav1.LabelSelectorAsSelector(simpleReplicator.Selector.LabelSelector)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error converting label selector: %w", err)
+		_baseLog.Error(err, "error converting label selector")
+		return ctrl.Result{}, err
 	}
 	_baseLog.V(5).Info("labelSelector content", "labelselector", labelselector)
 
@@ -194,7 +174,8 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				"unstructuredListListOptions", unstructuredListListOptions)
 			return ctrl.Result{}, err
 		}
-		_resourceLog.V(5).Info("unstructuredListListOptions content", "*unstructuredListListOptions", *unstructuredListListOptions)
+		_resourceLog.V(5).Info("unstructuredListListOptions content",
+			"*unstructuredListListOptions", *unstructuredListListOptions)
 
 		// get resources, that are directly linked to the simplereplicator, due to set labels
 		var unstructuredList = helpers.UnstructuredListFromObject(_resource)
@@ -216,12 +197,12 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			var _namespaceLog = _resourceLog.V(2).WithValues("destinationNamespace", _namespace.Name)
 
 			// prepare destinationResource pointer for checks
-			var destinationResource = _resource.DeepCopy()
-			destinationResource.SetNamespace(_namespace.Name)
-			destinationResource.SetLabels(validator.OwnerLabels(_resource.GetLabels(), simpleReplicator))
+			var destinationResource = helpers.CreateOwnedObjectWithNamespace(simpleReplicator, _resource, _namespace.Name)
 
 			if obj, doesExist := hashMap[destinationResource.GetNamespace()+"/"+destinationResource.GetName()]; doesExist {
-				_namespaceLog.V(3).Info("object exists in hashmap", "obj", obj)
+				_namespaceLog.V(3).Info("object exists in hashmap", "obj.Uid", obj.GetUID())
+			} else {
+				_namespaceLog.V(3).Info("object does not exist in hashmap", "obj.Uid", obj.GetUID())
 			}
 
 			// verify whether an resource does exist and should exist
