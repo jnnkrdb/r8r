@@ -167,9 +167,9 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		_resourceLog.Info("handling resource")
 
 		// prepare the Listoptions with the labelselector
-		var unstructuredListListOptions = &client.ListOptions{}
-		if unstructuredListListOptions, err = validator.GetListOptionWithLabelSelector(
-			lbls.OwnerLabels(_resource.GetLabels(), simpleReplicator)); err != nil {
+		unstructuredListListOptions, err := validator.GetListOptionWithLabelSelector(
+			lbls.OwnerLabels(_resource.GetLabels(), simpleReplicator))
+		if err != nil {
 			_resourceLog.Error(err, "creating listOptions for resourceList fetching",
 				"unstructuredListListOptions", unstructuredListListOptions)
 			return ctrl.Result{}, err
