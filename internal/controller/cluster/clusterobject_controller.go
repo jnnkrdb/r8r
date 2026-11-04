@@ -135,7 +135,7 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		&clusterObject.Status.DefaultStatusFields,
 	)
 
-	_log.V(5).Info("clusterobject content", "*clusterObject", *clusterObject)
+	_log.V(3).Info("clusterobject content", "*clusterObject", *clusterObject)
 
 	// request a list of namespaces, to parse through the list and
 	// then check every namespace with the give item
@@ -176,7 +176,7 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		)
 	}
 
-	_log.V(3).Info("calculated required namespaces", "requiredNamespaces", *requiredNamespaces)
+	_log.V(1).Info("calculated required namespaces", "requiredNamespaces", *requiredNamespaces)
 
 	// parse through all namespaces and check each for the defined object
 	for _, namespace := range namespaces.Items {
@@ -231,12 +231,12 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 
 	var _log = logf.FromContext(ctx)
 
-	_log.V(3).Info("check object")
+	_log.V(1).Info("check object")
 
 	// create copy of resources object
 	var typedObject = clusterObject.Replicator.Resource.DeepCopy()
 
-	_log.V(5).Info("object from resources cached",
+	_log.V(3).Info("object from resources cached",
 		"*typedObject", *typedObject,
 		"clusterObject.Replicator.Resource", clusterObject.Replicator.Resource)
 
@@ -268,16 +268,16 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 		)
 	}
 
-	_log.V(3).Info("state calculated", "shouldExist", shouldExist, "doesExist", doesExist)
+	_log.V(1).Info("state calculated", "shouldExist", shouldExist, "doesExist", doesExist)
 
 	// after calculating the current state, handle the 4 cases
 	if !shouldExist && !doesExist { // --------------------------------------------------------- case 1 -> ignore
-		_log.V(3).Info("ignoring")
+		_log.V(1).Info("ignoring")
 		return nil
 	}
 
 	if shouldExist && !doesExist { // --------------------------------------------------------- case 2 -> create
-		_log.V(3).Info("creating")
+		_log.V(1).Info("creating")
 
 		// create the new object, as a blueprint, to create it in the cluster
 		typedObject := clusterObject.Replicator.Resource.DeepCopy()
@@ -314,12 +314,12 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 	// if the object does exist, and either should be updated or deleted,
 	// check if the owner is in fact the clusterobject
 	if !metav1.IsControlledBy(typedObject, clusterObject) {
-		_log.V(3).Info("object does not contain ownerreference")
+		_log.V(1).Info("object does not contain ownerreference")
 		return nil
 	}
 
 	if shouldExist && doesExist { // --------------------------------------------------------- case 3 -> update
-		_log.V(3).Info("updating")
+		_log.V(1).Info("updating")
 		// update the values of the tempObject
 		typedObject = clusterObject.Replicator.Resource.DeepCopy()
 		typedObject.SetNamespace(namespace.Name)
@@ -351,7 +351,7 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 	}
 
 	if !shouldExist && doesExist { // --------------------------------------------------------- case 4 -> delete
-		_log.V(3).Info("deleting")
+		_log.V(1).Info("deleting")
 		// delete the object
 		if err := r.GetClient().Delete(ctx, typedObject, &client.DeleteOptions{}); client.IgnoreNotFound(err) != nil {
 			return statushandler.ThrowEventWithConditionOnError(

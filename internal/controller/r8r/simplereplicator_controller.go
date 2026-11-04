@@ -138,7 +138,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		&simpleReplicator.Status.DefaultStatusFields,
 	)
 
-	_currLog.V(5).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
+	_currLog.V(3).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
 
 	// create the labelseclector from the labelselector provided in the NamespaceSelector object.
 	labelselector, err := metav1.LabelSelectorAsSelector(simpleReplicator.Selector.LabelSelector)
@@ -146,7 +146,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, fmt.Errorf("error converting label selector: %w", err)
 	}
 
-	_currLog.V(5).Info("LabelSelector", "labelselector", labelselector)
+	_currLog.V(3).Info("LabelSelector", "labelselector", labelselector)
 
 	// request a list of namespaces, to parse through the list and
 	// then check every namespace with the give item
@@ -161,7 +161,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	_currLog.V(5).Info("gathered namespaceLists",
+	_currLog.V(3).Info("gathered namespaceLists",
 		"namespaces.Items", namespaces.Items,
 		"requiredNamespaces.Items", requiredNamespaces.Items,
 	)
@@ -174,7 +174,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if uls, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 			MatchLabels: lbls.OwnerLabels(_resource.GetLabels(), simpleReplicator),
 		}); err != nil {
-			_currLog.V(5).Error(err, "creating labelselector for unstructuredResourceList",
+			_currLog.V(3).Error(err, "creating labelselector for unstructuredResourceList",
 				"unstructuredListListOptions", unstructuredListListOptions,
 				"uls", uls,
 			)
@@ -193,7 +193,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, err
 		}
 
-		_currLog.V(5).Info("received list of resource",
+		_currLog.V(3).Info("received list of resource",
 			"unstructuredList", unstructuredList,
 			"unstructuredListListOptions", unstructuredListListOptions,
 		)
@@ -212,14 +212,14 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			destinationResource.SetNamespace(_namespace.Name)
 			destinationResource.SetLabels(validator.OwnerLabels(_resource.GetLabels(), simpleReplicator))
 
-			var currentLog = _currLog.V(3).WithValues(
+			var currentLog = _currLog.V(1).WithValues(
 				"GroupVersionKind", destinationResource.GroupVersionKind().String(),
 				"Name", destinationResource.GetName(),
 				"Namespace", destinationResource.GetNamespace(),
 			)
 
 			if obj, doesExist := hashMap[destinationResource.GetNamespace()+"/"+destinationResource.GetName()]; doesExist {
-				currentLog.V(5).Info("object exists in hashmap", "obj", obj)
+				currentLog.V(3).Info("object exists in hashmap", "obj", obj)
 			}
 
 			// verify whether an resource does exist and should exist
