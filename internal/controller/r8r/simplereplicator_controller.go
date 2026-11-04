@@ -160,7 +160,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// for every resource in the reources list, check if it has to be created/updated/deleted in any namespace
 	for _, _resource := range simpleReplicator.Resources {
 
-		var _resourceLog = _baseLog.V(1).WithValues(
+		var _resourceLog = _baseLog.WithValues(
 			"currentResource.GroupVersionKind", _resource.GroupVersionKind().String(),
 			"currentResource.Name", _resource.GetName(),
 		)
@@ -194,10 +194,12 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// the object has to be created, updated or deleted from the namespace.
 		for _, _namespace := range allNamespaces.Items {
 
-			var _namespaceLog = _resourceLog.V(2).WithValues("destinationNamespace", _namespace.Name)
+			var _namespaceLog = _resourceLog.WithValues("destinationNamespace", _namespace.Name)
 
 			// prepare destinationResource pointer for checks
 			var destinationResource = helpers.CreateOwnedObjectWithNamespace(simpleReplicator, _resource, _namespace.Name)
+			_namespaceLog.V(5).Info("destinationResource content",
+				"*destinationResource", *destinationResource)
 
 			if obj, doesExist := hashMap[destinationResource.GetNamespace()+"/"+destinationResource.GetName()]; doesExist {
 				_namespaceLog.V(3).Info("object exists in hashmap", "obj.Uid", obj.GetUID())
@@ -218,14 +220,14 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				}
 			}
 
-			_namespaceLog.Info("live-state/desired-state for resource calculated",
+			_namespaceLog.V(3).Info("live-state/desired-state for resource calculated",
 				"shouldExist", shouldExist,
 				"doesExist", doesExist,
 			)
 
 			// case 1: resource should not exist and does not exist -> ignore
 			if !shouldExist && !doesExist {
-				_namespaceLog.Info("nothing has to be done")
+				_namespaceLog.V(3).Info("nothing has to be done")
 				continue
 			}
 
