@@ -120,7 +120,7 @@ func (r *SimpleReplicatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var _baseLog = logf.FromContext(ctx)
 
-	_baseLog.Info("reconciling SimpleReplicator object", "req", req)
+	_baseLog.Info("reconciling SimpleReplicator object", "req", req, "ctx", ctx)
 
 	// create cached object of requested resource
 	var simpleReplicator = &r8rv1beta1.SimpleReplicator{}
@@ -202,7 +202,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if obj, doesExist := hashMap[destinationResource.GetNamespace()+"/"+destinationResource.GetName()]; doesExist {
 				_namespaceLog.V(3).Info("object exists in hashmap", "obj.Uid", obj.GetUID())
 			} else {
-				_namespaceLog.V(3).Info("object does not exist in hashmap", "obj.Uid", obj.GetUID())
+				_namespaceLog.V(3).Info("object does not exist in hashmap")
 			}
 
 			// verify whether an resource does exist and should exist
