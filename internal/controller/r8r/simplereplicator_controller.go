@@ -29,7 +29,6 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -47,9 +46,9 @@ import (
 	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
 	"github.com/jnnkrdb/r8r/pkg/generics"
 	"github.com/jnnkrdb/r8r/pkg/reconciliation"
+	"github.com/jnnkrdb/r8r/pkg/reconciliation/helpers"
 	lbls "github.com/jnnkrdb/r8r/pkg/reconciliation/labels"
 	validator "github.com/jnnkrdb/r8r/pkg/reconciliation/labels"
-	"github.com/jnnkrdb/r8r/pkg/status"
 )
 
 // SimpleReplicatorReconciler reconciles a SimpleReplicator object
@@ -120,106 +119,109 @@ func (r *SimpleReplicatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.24.1/pkg/reconcile
 func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	var _currLog = logf.FromContext(ctx)
+	var _baseLog = logf.FromContext(ctx)
+
+	_baseLog.Info("reconciling SimpleReplicator object", "req", req)
 
 	var simpleReplicator = &r8rv1beta1.SimpleReplicator{}
 	if err := r.GetClient().Get(ctx, req.NamespacedName, simpleReplicator, &client.GetOptions{}); err != nil {
-		_currLog.Error(err, "error fetching object from cluster")
+		_baseLog.Error(err, "error fetching object from cluster")
 		return ctrl.Result{}, err
 	}
 
+	var e = fmt.Errorf("test error")
+	_baseLog.V(0).Error(e, "test")
+	_baseLog.V(1).Error(e, "test")
+	_baseLog.V(2).Error(e, "test")
+	_baseLog.V(3).Error(e, "test")
+	_baseLog.V(4).Error(e, "test")
+	_baseLog.V(5).Error(e, "test")
+	_baseLog.V(6).Error(e, "test")
+	_baseLog.V(7).Error(e, "test")
+	if e != nil {
+		return ctrl.Result{}, e
+	}
+
+	_baseLog.V(5).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
+
 	// create the reconciliation handler
 	var reconciler = reconciliation.NewReconciliationHandler(ctx, r, simpleReplicator)
+	_baseLog.V(5).Info("initialized reconciler", "*reconciler", *reconciler)
 
-	var statushandler = status.NewStatusHandler(
-		ctx,
-		r,
-		simpleReplicator,
-		&simpleReplicator.Status.DefaultStatusFields,
-	)
-
-	_currLog.V(3).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
+	//var statushandler = status.NewStatusHandler(
+	//	ctx,
+	//	r,
+	//	simpleReplicator,
+	//	&simpleReplicator.Status.DefaultStatusFields,
+	//)
 
 	// create the labelseclector from the labelselector provided in the NamespaceSelector object.
 	labelselector, err := metav1.LabelSelectorAsSelector(simpleReplicator.Selector.LabelSelector)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error converting label selector: %w", err)
 	}
-
-	_currLog.V(3).Info("LabelSelector", "labelselector", labelselector)
+	_baseLog.V(5).Info("labelSelector content", "labelselector", labelselector)
 
 	// request a list of namespaces, to parse through the list and
 	// then check every namespace with the give item
-	var namespaces = &corev1.NamespaceList{}
-	if err := reconciler.List(ctx, namespaces); err != nil {
+	var allNamespaces = &corev1.NamespaceList{}
+	if err := reconciler.List(ctx, allNamespaces); err != nil {
 		return ctrl.Result{}, err
 	}
+	_baseLog.V(5).Info("allNamespaces content", "*allNamespaces", *allNamespaces)
 
 	// request a list of namespaces, which are required to inherit the defined object
 	var requiredNamespaces = &corev1.NamespaceList{}
 	if err := reconciler.List(ctx, requiredNamespaces, &client.ListOptions{LabelSelector: labelselector}); err != nil {
 		return ctrl.Result{}, err
 	}
-
-	_currLog.V(3).Info("gathered namespaceLists",
-		"namespaces.Items", namespaces.Items,
-		"requiredNamespaces.Items", requiredNamespaces.Items,
-	)
+	_baseLog.V(5).Info("requiredNamespaces content", "*requiredNamespaces", *requiredNamespaces)
 
 	// for every resource in the reources list, check if it has to be created/updated/deleted in any namespace
 	for _, _resource := range simpleReplicator.Resources {
 
+		var _resourceLog = _baseLog.V(1).WithValues(
+			"currentResource.GroupVersionKind", _resource.GroupVersionKind().String(),
+			"currentResource.Name", _resource.GetName(),
+		)
+		_resourceLog.Info("handling resource")
+
 		// prepare the Listoptions with the labelselector
 		var unstructuredListListOptions = &client.ListOptions{}
-		if uls, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-			MatchLabels: lbls.OwnerLabels(_resource.GetLabels(), simpleReplicator),
-		}); err != nil {
-			_currLog.V(3).Error(err, "creating labelselector for unstructuredResourceList",
-				"unstructuredListListOptions", unstructuredListListOptions,
-				"uls", uls,
-			)
-		} else {
-			unstructuredListListOptions.LabelSelector = uls
+		if unstructuredListListOptions, err = validator.GetListOptionWithLabelSelector(
+			lbls.OwnerLabels(_resource.GetLabels(), simpleReplicator)); err != nil {
+			_resourceLog.Error(err, "creating listOptions for resourceList fetching",
+				"unstructuredListListOptions", unstructuredListListOptions)
+			return ctrl.Result{}, err
 		}
+		_resourceLog.V(5).Info("unstructuredListListOptions content", "*unstructuredListListOptions", *unstructuredListListOptions)
 
 		// get resources, that are directly linked to the simplereplicator, due to set labels
-		var unstructuredList = &unstructured.UnstructuredList{}
-		unstructuredList.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   _resource.GroupVersionKind().Group,
-			Version: _resource.GroupVersionKind().Version,
-			Kind:    _resource.GroupVersionKind().Kind + "List",
-		})
+		var unstructuredList = helpers.UnstructuredListFromObject(_resource)
 		if err := reconciler.List(ctx, unstructuredList, unstructuredListListOptions); err != nil {
 			return ctrl.Result{}, err
 		}
-
-		_currLog.V(3).Info("received list of resource",
-			"unstructuredList", unstructuredList,
-			"unstructuredListListOptions", unstructuredListListOptions,
-		)
+		_resourceLog.V(5).Info("unstructuredList content", "*unstructuredList", *unstructuredList)
 
 		// parse the list to a map type to check like in a hashmap
 		hashMap := generics.UnstructuredListToHashmap(unstructuredList, func(o unstructured.Unstructured) string {
 			return o.GetNamespace() + "/" + o.GetName()
 		})
+		_resourceLog.V(5).Info("hashMap content", "hashMap", hashMap)
 
 		// parse through all namespaces in the cluster and check, whether
 		// the object has to be created, updated or deleted from the namespace.
-		for _, _namespace := range namespaces.Items {
+		for _, _namespace := range allNamespaces.Items {
+
+			var _namespaceLog = _resourceLog.V(2).WithValues("destinationNamespace", _namespace.Name)
 
 			// prepare destinationResource pointer for checks
 			var destinationResource = _resource.DeepCopy()
 			destinationResource.SetNamespace(_namespace.Name)
 			destinationResource.SetLabels(validator.OwnerLabels(_resource.GetLabels(), simpleReplicator))
 
-			var currentLog = _currLog.V(1).WithValues(
-				"GroupVersionKind", destinationResource.GroupVersionKind().String(),
-				"Name", destinationResource.GetName(),
-				"Namespace", destinationResource.GetNamespace(),
-			)
-
 			if obj, doesExist := hashMap[destinationResource.GetNamespace()+"/"+destinationResource.GetName()]; doesExist {
-				currentLog.V(3).Info("object exists in hashmap", "obj", obj)
+				_namespaceLog.V(3).Info("object exists in hashmap", "obj", obj)
 			}
 
 			// verify whether an resource does exist and should exist
@@ -235,14 +237,14 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				}
 			}
 
-			currentLog.Info("live-state/desired-state for resource calculated",
+			_namespaceLog.Info("live-state/desired-state for resource calculated",
 				"shouldExist", shouldExist,
 				"doesExist", doesExist,
 			)
 
 			// case 1: resource should not exist and does not exist -> ignore
 			if !shouldExist && !doesExist {
-				currentLog.Info("nothing has to be done")
+				_namespaceLog.Info("nothing has to be done")
 				continue
 			}
 
@@ -266,7 +268,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// if the object does exist, and either should be updated or deleted,
 			// check if the owner is in fact the clusterobject
 			if !metav1.IsControlledBy(destinationResource, simpleReplicator) {
-				currentLog.Info("object does not contain ownerreference")
+				_namespaceLog.Info("object does not contain ownerreference")
 				continue
 			}
 
@@ -297,17 +299,18 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
-	_currLog.Info("successfully created resource-replicas in required namespaces")
+	_baseLog.Info("successfully created resource-replicas in required namespaces")
 
 	r.GetRecorder().Eventf(
 		simpleReplicator, nil,
 		"Normal", "ResourceReplication",
 		"ReplicateResources", "successfully finished reconciliation of simplereplicator resources.")
 
-	return ctrl.Result{}, statushandler.SetCondition(metav1.Condition{
-		Type:    status.Condition_Complete,
-		Status:  metav1.ConditionTrue,
-		Reason:  "ReplicatedResource",
-		Message: "successfully replicated resource among required namespaces",
-	})
+	return ctrl.Result{}, nil
+	//statushandler.SetCondition(metav1.Condition{
+	//	Type:    status.Condition_Complete,
+	//	Status:  metav1.ConditionTrue,
+	//	Reason:  "ReplicatedResource",
+	//	Message: "successfully replicated resource among required namespaces",
+	//})
 }
