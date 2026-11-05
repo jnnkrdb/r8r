@@ -1,0 +1,38 @@
+{{- $global := .Values.global -}}
+{{- $main := .Values -}}
+{{- $wl := $main.workload -}}
+{{- $hpa := $main.hpa -}}
+
+{{- if not $wl.replicaCount -}}
+{{- if $hpa.enabled -}}
+{{- if has (include "common.workloadKind" ( dict "kind" $wl.kind )) ( list "Deployment" "StatefulSet" ) -}}
+--- # --------------------------------------------------------------------------------- HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "common.fullname" . }}
+  labels:
+    {{- include "common.defaultLabels" . | nindent 4 }}
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.labels 
+                          $main.labels 
+                          $hpa.labels) ) | nindent 4 }}
+  annotations:
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.annotations 
+                          $main.annotations 
+                          $hpa.annotations) ) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: {{ include "common.workloadKind" ( dict "kind" $wl.kind ) }}
+    name: {{ include "common.fullname" . }}
+  minReplicas: {{ $hpa.minReplicas }}
+  maxReplicas: {{ $hpa.maxReplicas }}
+  {{- with $hpa.metrics }}
+  metrics:
+    {{- . | toYaml | nindent 4 }}
+  {{- end }}
+{{- end -}}
+{{- end -}}
+{{- end -}}

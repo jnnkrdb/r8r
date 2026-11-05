@@ -39,7 +39,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/v1alpha1"
+	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/cluster/v1alpha1"
 	"github.com/jnnkrdb/r8r/test/utils/fakerecorder"
 )
 

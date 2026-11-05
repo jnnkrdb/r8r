@@ -1,0 +1,48 @@
+{{- $v := .Values -}}
+{{- $global := $v.global -}}
+{{- $main := $v -}}
+{{- $svc := $main.service -}}
+
+--- # --------------------------------------------------------------------------------- Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "common.fullname" . }}
+  labels:
+    {{- include "common.defaultLabels" . | nindent 4 }}
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.labels 
+                          $main.labels 
+                          $svc.labels) ) | nindent 4 }}
+  annotations:
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.annotations 
+                          $main.annotations 
+                          $svc.annotations) ) | nindent 4 }}
+spec:
+  type: {{ $svc.type }}
+  {{- if and $svc.clusterIP (eq $svc.type "ClusterIP") }}
+  clusterIP: {{ $svc.clusterIP }}
+  {{- end }}
+  {{- with $svc.ipFamilyPolicy }}
+  ipFamilyPolicy: {{ . | quote }}
+  {{- end }}
+  {{- with $svc.ipFamilies }}
+  ipFamilies:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  ports:
+    {{- range $portName, $portSpecs := $svc.ports }}
+    - name: {{ $portName | quote }}
+      protocol: {{ $portSpecs.protocol }}
+      targetPort: {{ $portSpecs.port }}
+      port: {{ $portSpecs.port }}
+      {{- if and $portSpecs.nodePort (eq $svc.type "NodePort") }}
+      nodePort: {{ $portSpecs.nodePort }}
+      {{- end }}
+    {{- end }}
+  {{- with $svc.publishNotReadyAddresses }}
+  publishNotReadyAddresses: {{ . }}
+  {{- end }}
+  selector:
+    {{- include "common.defaultSelectorLabels" . | nindent 4 }}
