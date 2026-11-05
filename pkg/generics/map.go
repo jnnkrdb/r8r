@@ -1,7 +1,11 @@
 package generics
 
 import (
+	"fmt"
+
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -22,4 +26,25 @@ func UnstructuredListToHashmap(list *unstructured.UnstructuredList, fnKey func(u
 		out[fnKey(item)] = &item
 	}
 	return out
+}
+
+// create a map from an objectList
+func ObjectListToMap(list client.ObjectList, fnKey func(client.Object) string) (map[string]client.Object, error) {
+	// create the map from with the items list
+	out := make(map[string]client.Object)
+
+	err := meta.EachListItem(list, func(o runtime.Object) error {
+
+		obj, ok := o.(client.Object)
+		if !ok {
+			return fmt.Errorf("item %T is not a client.Object", o)
+		}
+
+		// the object to the map, with the given key function
+		out[fnKey(obj)] = obj
+
+		return nil // returning an error stops the iteration
+	})
+
+	return out, err
 }
