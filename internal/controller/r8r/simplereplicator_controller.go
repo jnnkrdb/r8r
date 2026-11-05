@@ -131,16 +131,8 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	_baseLog.V(5).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
 
 	// create the reconciliation handler
-	var reconciler = reconciliation.NewReconciliationHandler(ctx, r, simpleReplicator)
+	var reconciler = reconciliation.NewReconciliationHandler(r, simpleReplicator)
 	_baseLog.V(5).Info("initialized reconciler", "*reconciler", *reconciler)
-
-	// create the labelseclector from the labelselector provided in the NamespaceSelector object.
-	labelselector, err := metav1.LabelSelectorAsSelector(simpleReplicator.Selector.LabelSelector)
-	if err != nil {
-		_baseLog.Error(err, "error converting label selector")
-		return ctrl.Result{}, err
-	}
-	_baseLog.V(5).Info("labelSelector content", "labelselector", labelselector)
 
 	// request a list of namespaces, to parse through the list and
 	// then check every namespace with the give item
@@ -150,6 +142,22 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	_baseLog.V(5).Info("allNamespaces content", "*allNamespaces", *allNamespaces)
 
+	allNamespacesHashMap, err := generics.ObjectListToMap(allNamespaces, func(o client.Object) string {
+		return o.GetName()
+	})
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	_baseLog.V(5).Info("allNamespacesHashMap content", "allNamespacesHashMap", allNamespacesHashMap)
+
+	// create the labelseclector from the labelselector provided in the NamespaceSelector object.
+	labelselector, err := metav1.LabelSelectorAsSelector(simpleReplicator.Spec.Selector.LabelSelector)
+	if err != nil {
+		_baseLog.Error(err, "error converting label selector")
+		return ctrl.Result{}, err
+	}
+	_baseLog.V(5).Info("labelSelector content", "labelselector", labelselector)
+
 	// request a list of namespaces, which are required to inherit the defined object
 	var requiredNamespaces = &corev1.NamespaceList{}
 	if err := reconciler.List(ctx, requiredNamespaces, &client.ListOptions{LabelSelector: labelselector}); err != nil {
@@ -157,8 +165,16 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	_baseLog.V(5).Info("requiredNamespaces content", "*requiredNamespaces", *requiredNamespaces)
 
+	requiredNamespacesHashMap, err := generics.ObjectListToMap(requiredNamespaces, func(o client.Object) string {
+		return o.GetName()
+	})
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	_baseLog.V(5).Info("requiredNamespacesHashMap content", "requiredNamespacesHashMap", requiredNamespacesHashMap)
+
 	// for every resource in the reources list, check if it has to be created/updated/deleted in any namespace
-	for _, _resource := range simpleReplicator.Resources {
+	for _, _resource := range simpleReplicator.Spec.Resources {
 
 		var _resourceLog = _baseLog.WithValues(
 			"currentResource.GroupVersionKind", _resource.GroupVersionKind().String(),

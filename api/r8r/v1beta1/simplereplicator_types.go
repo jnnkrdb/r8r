@@ -57,15 +57,26 @@ type SimpleReplicator struct {
 	metav1.ObjectMeta `json:"metadata,omitzero"`
 
 	// +required
+	Spec SimpleReplicatorSpec `json:"spec"`
+
+	// status defines the observed state of SimpleReplicator
+	// +optional
+	Status SimpleReplicatorStatus `json:"status,omitzero"`
+}
+
+// specifications of the simplereplicator resource
+type SimpleReplicatorSpec struct {
+
+	// +optional
+	// +kubebuilder:default=false
+	OverwriteExisting *bool `json:"overwriteExisting,omitempty"`
+
+	// +required
 	Selector Selector `json:"namespaceSelector"`
 
 	// +kubebuilder:pruning:PreserveUnknownFields
 	// +required
 	Resources []unstructured.Unstructured `json:"resources"`
-
-	// status defines the observed state of SimpleReplicator
-	// +optional
-	Status SimpleReplicatorStatus `json:"status,omitzero"`
 }
 
 // +kubebuilder:object:root=true
@@ -84,6 +95,7 @@ func init() {
 	})
 }
 
+// contains the selector for the namespaces, based on labels
 type Selector struct {
 	// +required
 	LabelSelector *metav1.LabelSelector `json:"labelSelector" protobuf:"bytes,4,opt,name=labelSelector"`
