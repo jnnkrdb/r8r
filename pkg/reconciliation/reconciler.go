@@ -2,11 +2,16 @@ package reconciliation
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/jnnkrdb/r8r/pkg/generics"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // this implements the reconciler interface, which enables some
@@ -51,6 +56,19 @@ func (rh *ReconciliationHandler) List(ctx context.Context, list client.ObjectLis
 	return rh.reconciler.GetClient().List(ctx, list, opts...)
 }
 
+// list with labelselector
+func (rh *ReconciliationHandler) ListWithLabelSelector(
+	ctx context.Context, list client.ObjectList, labelSelector *metav1.LabelSelector, opts ...client.ListOption) error {
+
+	ls, err := metav1.LabelSelectorAsSelector(labelSelector)
+	if err != nil {
+
+		return fmt.Errorf("error converting labelselector(incoming: %v): %v", labelSelector, err)
+	}
+
+	return rh.List(ctx, list, append(opts, &client.ListOptions{LabelSelector: ls})...)
+}
+
 // raw get function
 func (rh *ReconciliationHandler) Get(
 	ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
@@ -84,4 +102,34 @@ func (rh *ReconciliationHandler) DoesObjectExist(ctx context.Context, obj client
 	}
 
 	return true, nil
+}
+
+// get ownership labels
+func (rh *ReconciliationHandler) GetOwnerLabels(labels map[string]string) map[string]string {
+	labels = generics.MapFromNil(labels)
+	labels["r8r.jnnkrdb.de/ownedBy"] = string(rh.controllingObject.GetUID())
+	return labels
+}
+
+// creates a resource, that is owned by the controlling object
+func (rh *ReconciliationHandler) CreateSubResource(object unstructured.Unstructured, namespace string) (client.Object, error) {
+
+	// create a copy of the given object, that can be used with client.Object interface
+	var owned = object.DeepCopy()
+
+	// set the namespace
+	owned.SetNamespace(namespace)
+
+	// set the ownerlabels
+	owned.SetLabels(rh.GetOwnerLabels(object.GetLabels()))
+
+	// set the ownership via the ownerReferences
+	if err := controllerutil.SetControllerReference(
+		rh.controllingObject, owned, rh.reconciler.GetScheme(),
+	); err != nil {
+
+		return owned, err
+	}
+
+	return owned, nil
 }
