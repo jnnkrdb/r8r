@@ -32,7 +32,6 @@ import (
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -40,7 +39,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
 	"github.com/jnnkrdb/r8r/pkg/generics"
@@ -183,9 +181,12 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		_resourceLog.V(5).Info("unstructuredList content", "*unstructuredList", *unstructuredList)
 
 		// parse the list to a map type to check like in a hashmap
-		subresourcesHashMap := generics.UnstructuredListToHashmap(unstructuredList, func(o unstructured.Unstructured) string {
+		subresourcesHashMap, err := generics.ObjectListToMap(unstructuredList, func(o client.Object) string {
 			return o.GetNamespace() + "/" + o.GetName()
 		})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 		_resourceLog.V(5).Info("subresourcesHashMap content", "subresourcesHashMap", subresourcesHashMap)
 
 		// parse through all namespaces in the cluster and check, whether
@@ -249,15 +250,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 			// case 3: resource should exist and does exist and is owned by parent resources -> update
 			if shouldExist && doesExist {
-
-				// set owner of the object
-				if err := controllerutil.SetControllerReference(
-					simpleReplicator, subResource, r.GetScheme(),
-				); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				// update te object
 				if err := reconciler.Update(ctx, subResource); err != nil {
 					return ctrl.Result{}, err
 				}
