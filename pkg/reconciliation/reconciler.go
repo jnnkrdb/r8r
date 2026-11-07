@@ -31,13 +31,6 @@ type ReconciliationHandler struct {
 }
 
 // create a new handler instance from a given reconciler
-//   - 'related' is the secondary object for more complex actions. E.g. when regarding object triggers a creation or deletion of related object.
-//   - 'type' of this event, and can be one of Normal, Warning. New types could be added in future 'reason' is the reason this event is generated.
-//   - 'reason' should be short and unique; it should be in UpperCamelCase format (starting with a capital letter).
-//     "reason" will be used to automate handling of events, so imagine people writing switch statements to handle them. You want to make that easy.
-//   - 'action' explains what happened with regarding/what action did the ReportingController (ReportingController is a type of a Controller reporting an Event,
-//     e.g. k8s.io/node-controller, k8s.io/kubelet.) take in regarding's name; it should be in UpperCamelCase format (starting with a capital letter).
-//   - 'note' is intended to be human readable.
 func NewReconciliationHandler(rd Reconciler, pObj client.Object) *ReconciliationHandler {
 	return &ReconciliationHandler{
 		reconciler:        rd,
@@ -46,8 +39,21 @@ func NewReconciliationHandler(rd Reconciler, pObj client.Object) *Reconciliation
 }
 
 // throw an event, that is related to the controllingObject
+//   - 'related' is the secondary object for more complex actions. E.g. when regarding object triggers a creation or deletion of related object.
+//   - 'type' of this event, and can be one of Normal, Warning. New types could be added in future 'reason' is the reason this event is generated.
+//   - 'reason' should be short and unique; it should be in UpperCamelCase format (starting with a capital letter).
+//     "reason" will be used to automate handling of events, so imagine people writing switch statements to handle them. You want to make that easy.
+//   - 'action' explains what happened with regarding/what action did the ReportingController (ReportingController is a type of a Controller reporting an Event,
+//     e.g. k8s.io/node-controller, k8s.io/kubelet.) take in regarding's name; it should be in UpperCamelCase format (starting with a capital letter).
+//   - 'note' is intended to be human readable.
 func (rh *ReconciliationHandler) ThrowEvent(
-	related runtime.Object, eventtype string, reason string, action string, note string, args ...interface{}) {
+	related runtime.Object,
+	eventtype string,
+	reason string,
+	action string,
+	note string,
+	args ...interface{}) {
+
 	rh.reconciler.GetRecorder().Eventf(rh.controllingObject, related, eventtype, reason, action, note, args...)
 }
 
@@ -58,15 +64,47 @@ func (rh *ReconciliationHandler) List(ctx context.Context, list client.ObjectLis
 
 // list with labelselector
 func (rh *ReconciliationHandler) ListWithLabelSelector(
-	ctx context.Context, list client.ObjectList, labelSelector *metav1.LabelSelector, opts ...client.ListOption) error {
+	ctx context.Context,
+	list client.ObjectList,
+	labelSelector *metav1.LabelSelector,
+	opts ...client.ListOption) error {
 
 	ls, err := metav1.LabelSelectorAsSelector(labelSelector)
 	if err != nil {
-
 		return fmt.Errorf("error converting labelselector(incoming: %v): %v", labelSelector, err)
 	}
-
 	return rh.List(ctx, list, append(opts, &client.ListOptions{LabelSelector: ls})...)
+}
+
+// create an object list but return the HashMap
+func (rh *ReconciliationHandler) ListAsHashMap(
+	ctx context.Context,
+	list client.ObjectList,
+	kfn generics.KeyFunc,
+	opts ...client.ListOption) (generics.ObjectHashMap, error) {
+
+	// request the objects list from the cluster
+	if err := rh.List(ctx, list, opts...); err != nil {
+		return nil, fmt.Errorf("failed to fetch the objectList from the cluster [%v]: %v", list, err)
+	}
+	// create the hashmap from the returned list and return the outcome
+	return generics.ObjectListToMap(list, kfn)
+}
+
+// create an object list but return the HashMap with a given labelselector
+func (rh *ReconciliationHandler) ListAsHashMapWithLabelSelector(
+	ctx context.Context,
+	list client.ObjectList,
+	kfn generics.KeyFunc,
+	labelSelector *metav1.LabelSelector,
+	opts ...client.ListOption) (generics.ObjectHashMap, error) {
+
+	// request the objects list from the cluster
+	if err := rh.ListWithLabelSelector(ctx, list, labelSelector, opts...); err != nil {
+		return nil, fmt.Errorf("failed to fetch the objectList from the cluster [%v]: %v", list, err)
+	}
+	// create the hashmap from the returned list and return the outcome
+	return generics.ObjectListToMap(list, kfn)
 }
 
 // raw get function

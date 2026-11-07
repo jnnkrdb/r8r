@@ -132,35 +132,48 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// request a list of namespaces, to parse through the list and
 	// then check every namespace with the give item
-	var allNamespaces = &corev1.NamespaceList{}
-	if err := reconciler.List(ctx, allNamespaces); err != nil {
-		return ctrl.Result{}, err
-	}
-	_baseLog.V(5).Info("allNamespaces content", "*allNamespaces", *allNamespaces)
-
-	allNamespacesHashMap, err := generics.ObjectListToMap(allNamespaces, func(o client.Object) string {
-		return o.GetName()
-	})
+	allNamespacesHashMap, err := reconciler.ListAsHashMap(ctx, &corev1.NamespaceList{}, generics.KeyFuncNamespaceName)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	_baseLog.V(5).Info("allNamespacesHashMap content", "allNamespacesHashMap", allNamespacesHashMap)
 
-	// request a list of namespaces, which are required to inherit the defined object
-	var requiredNamespaces = &corev1.NamespaceList{}
-	if err := reconciler.ListWithLabelSelector(
-		ctx, requiredNamespaces, simpleReplicator.Spec.Selector.LabelSelector); err != nil {
-		return ctrl.Result{}, err
-	}
-	_baseLog.V(5).Info("requiredNamespaces content", "*requiredNamespaces", *requiredNamespaces)
+	//var allNamespaces = &corev1.NamespaceList{}
+	//if err := reconciler.List(ctx, allNamespaces); err != nil {
+	//	return ctrl.Result{}, err
+	//}
+	//_baseLog.V(5).Info("allNamespaces content", "*allNamespaces", *allNamespaces)
+	//
+	//allNamespacesHashMap, err := generics.ObjectListToMap(allNamespaces, func(o client.Object) string {
+	//	return o.GetName()
+	//})
+	//if err != nil {
+	//	return ctrl.Result{}, err
+	//}
+	//_baseLog.V(5).Info("allNamespacesHashMap content", "allNamespacesHashMap", allNamespacesHashMap)
 
-	requiredNamespacesHashMap, err := generics.ObjectListToMap(requiredNamespaces, func(o client.Object) string {
-		return o.GetName()
-	})
+	// request a list of namespaces, which are required to inherit the defined object
+	requiredNamespacesHashMap, err := reconciler.ListAsHashMapWithLabelSelector(
+		ctx, &corev1.NamespaceList{}, generics.KeyFuncNamespaceName, simpleReplicator.Spec.Selector.LabelSelector)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	_baseLog.V(5).Info("requiredNamespacesHashMap content", "requiredNamespacesHashMap", requiredNamespacesHashMap)
+
+	//var requiredNamespaces = &corev1.NamespaceList{}
+	//if err := reconciler.ListWithLabelSelector(
+	//	ctx, requiredNamespaces, simpleReplicator.Spec.Selector.LabelSelector); err != nil {
+	//	return ctrl.Result{}, err
+	//}
+	//_baseLog.V(5).Info("requiredNamespaces content", "*requiredNamespaces", *requiredNamespaces)
+	//
+	//requiredNamespacesHashMap, err := generics.ObjectListToMap(requiredNamespaces, func(o client.Object) string {
+	//	return o.GetName()
+	//})
+	//if err != nil {
+	//	return ctrl.Result{}, err
+	//}
+	//_baseLog.V(5).Info("requiredNamespacesHashMap content", "requiredNamespacesHashMap", requiredNamespacesHashMap)
 
 	// for every resource in the reources list, check if it has to be created/updated/deleted in any namespace
 	for _, _resource := range simpleReplicator.Spec.Resources {
@@ -172,28 +185,37 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		_resourceLog.Info("handling resource")
 
 		// get resources, that are directly linked to the simplereplicator, due to set labels
-		var unstructuredList = helpers.UnstructuredListFromObject(_resource)
-		if err := reconciler.ListWithLabelSelector(ctx, unstructuredList, &metav1.LabelSelector{
-			MatchLabels: reconciler.GetOwnerLabels(_resource.GetLabels()),
-		}); err != nil {
-			return ctrl.Result{}, err
-		}
-		_resourceLog.V(5).Info("unstructuredList content", "*unstructuredList", *unstructuredList)
-
-		// parse the list to a map type to check like in a hashmap
-		subresourcesHashMap, err := generics.ObjectListToMap(unstructuredList, func(o client.Object) string {
-			return o.GetNamespace() + "/" + o.GetName()
-		})
+		subresourcesHashMap, err := reconciler.ListAsHashMapWithLabelSelector(
+			ctx, helpers.UnstructuredListFromObject(_resource), generics.KeyFuncNamespaceName, &metav1.LabelSelector{
+				MatchLabels: reconciler.GetOwnerLabels(_resource.GetLabels()),
+			})
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		_resourceLog.V(5).Info("subresourcesHashMap content", "subresourcesHashMap", subresourcesHashMap)
 
+		//var unstructuredList = helpers.UnstructuredListFromObject(_resource)
+		//if err := reconciler.ListWithLabelSelector(ctx, unstructuredList, &metav1.LabelSelector{
+		//	MatchLabels: reconciler.GetOwnerLabels(_resource.GetLabels()),
+		//}); err != nil {
+		//	return ctrl.Result{}, err
+		//}
+		//_resourceLog.V(5).Info("unstructuredList content", "*unstructuredList", *unstructuredList)
+		//
+		//// parse the list to a map type to check like in a hashmap
+		//subresourcesHashMap, err := generics.ObjectListToMap(unstructuredList, func(o client.Object) string {
+		//	return o.GetNamespace() + "/" + o.GetName()
+		//})
+		//if err != nil {
+		//	return ctrl.Result{}, err
+		//}
+		//_resourceLog.V(5).Info("subresourcesHashMap content", "subresourcesHashMap", subresourcesHashMap)
+
 		// parse through all namespaces in the cluster and check, whether
 		// the object has to be created, updated or deleted from the namespace.
-		for _, _namespace := range allNamespaces.Items {
+		for _, _namespace := range allNamespacesHashMap {
 
-			var _namespaceLog = _resourceLog.WithValues("destinationNamespace", _namespace.Name)
+			var _namespaceLog = _resourceLog.WithValues("destinationNamespace", _namespace.GetName())
 
 			// verify, whether an object already exists in the cluster, that is related to the simpleReplicator object
 			var doesExist bool = false
@@ -226,7 +248,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 
 			// prepare subResource for cluster write interactions
-			subResource, err := reconciler.CreateSubResource(_resource, _namespace.Name)
+			subResource, err := reconciler.CreateSubResource(_resource, _namespace.GetName())
 			if err != nil {
 				return ctrl.Result{}, err
 			}
