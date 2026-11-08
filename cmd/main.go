@@ -202,6 +202,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
 	if !disableR8RV1Beta1SimpleReplicator {
 		if err := (&r8rcontroller.SimpleReplicatorReconciler{
 			Client:   mgr.GetClient(),
