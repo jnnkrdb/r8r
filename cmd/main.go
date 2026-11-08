@@ -58,6 +58,15 @@ func init() {
 
 // nolint:gocyclo
 func main() {
+
+	// which crds should be reconciled
+	var disableClusterV1Alpha1ClusterObjects bool
+	var disableR8RV1Beta1SimpleReplicator bool
+	flag.BoolVar(&disableClusterV1Alpha1ClusterObjects, "disable-cluster-v1alpha1-clusterobject", false,
+		"Disable the reconciliation of the resource cluster.jnnkrdb.de/v1alpha1 ClusterObject.")
+	flag.BoolVar(&disableR8RV1Beta1SimpleReplicator, "disable-r8r-v1beta1-simplereplicator", false,
+		"Disable the reconciliation of the resource r8r.jnnkrdb.de/v1beta1 SimpleReplicator.")
+
 	var metricsAddr string
 	var metricsCertPath, metricsCertName, metricsCertKey string
 	var webhookCertPath, webhookCertName, webhookCertKey string
@@ -183,21 +192,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&clustercontroller.ClusterObjectReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorder("clusterobject-controller"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "cluster-clusterobject")
-		os.Exit(1)
+	if !disableClusterV1Alpha1ClusterObjects {
+		if err := (&clustercontroller.ClusterObjectReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   mgr.GetScheme(),
+			Recorder: mgr.GetEventRecorder("clusterobject-controller"),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create controller", "controller", "cluster-clusterobject")
+			os.Exit(1)
+		}
 	}
-	if err := (&r8rcontroller.SimpleReplicatorReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorder("r8r-simplereplicator-controller"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "r8r-simplereplicator")
-		os.Exit(1)
+	if !disableR8RV1Beta1SimpleReplicator {
+		if err := (&r8rcontroller.SimpleReplicatorReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   mgr.GetScheme(),
+			Recorder: mgr.GetEventRecorder("r8r-simplereplicator-controller"),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create controller", "controller", "r8r-simplereplicator")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 
