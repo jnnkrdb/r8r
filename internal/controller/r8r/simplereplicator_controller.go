@@ -46,6 +46,7 @@ import (
 	"github.com/jnnkrdb/r8r/pkg/generics"
 	"github.com/jnnkrdb/r8r/pkg/reconciliation"
 	"github.com/jnnkrdb/r8r/pkg/reconciliation/helpers"
+	"github.com/jnnkrdb/r8r/pkg/status"
 )
 
 // SimpleReplicatorReconciler reconciles a SimpleReplicator object
@@ -128,6 +129,13 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	_baseLog.V(5).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
 
+	// create a defer function to patch the status fields, even when one resource fails to be reconciled
+	defer func() {
+		if err := r.GetClient().Status().Patch(ctx, simpleReplicator, client.Merge); err != nil {
+			_baseLog.Error(err, "failed patching status field", "simpleReplicator.Status", simpleReplicator.Status)
+		}
+	}()
+
 	// create the reconciliation handler
 	var reconciler = reconciliation.NewReconciliationHandler(r, simpleReplicator)
 	_baseLog.V(5).Info("initialized reconciler", "*reconciler", *reconciler)
@@ -136,6 +144,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// then check every namespace with the give item
 	allNamespacesHashMap_primary, err := reconciler.ListAsHashMap(ctx, &corev1.NamespaceList{}, generics.KeyFuncNamespaceName)
 	if err != nil {
+		_baseLog.Error(err, "creating allNamespacesHashMap_primary")
 		return ctrl.Result{}, err
 	}
 	_baseLog.V(5).Info("allNamespacesHashMap_primary content", "allNamespacesHashMap_primary", allNamespacesHashMap_primary)
@@ -144,6 +153,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	requiredNamespacesHashMap_primary, err := reconciler.ListAsHashMapWithLabelSelector(
 		ctx, &corev1.NamespaceList{}, generics.KeyFuncNamespaceName, simpleReplicator.Spec.Selector.LabelSelector)
 	if err != nil {
+		_baseLog.Error(err, "creating requiredNamespacesHashMap_primary")
 		return ctrl.Result{}, err
 	}
 	_baseLog.V(5).Info("requiredNamespacesHashMap_primary content",
@@ -178,6 +188,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// original map.
 		// with the defer function we ensure, that the reference can be collected safely
 		// from the garbage collector and will not be used after the function drops
+
 		//var allNamespacesHashMap = maps.Clone(allNamespacesHashMap_primary)
 		var requiredNamespacesHashMap = maps.Clone(requiredNamespacesHashMap_primary)
 		defer func() {
@@ -191,9 +202,11 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				MatchLabels: reconciler.GetOwnerLabels(_r.GetLabels()),
 			})
 		if err != nil {
+			_resourceLog.Error(err, "creating existingSubresourcesHashMap")
 			return ctrl.Result{}, err
 		}
-		_resourceLog.V(5).Info("existingSubresourcesHashMap content", "existingSubresourcesHashMap", existingSubresourcesHashMap)
+		_resourceLog.V(5).Info("existingSubresourcesHashMap content",
+			"existingSubresourcesHashMap", existingSubresourcesHashMap)
 
 		/*
 			after the successful request for the existingSubresourcesHashMap we have the three hashmaps, to
@@ -231,23 +244,33 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// create the new/updated version of the to-deploy subresource
 			toDeploySubResource, err := reconciler.CreateSubResource(_r, possibleResource.Namespace)
 			if err != nil {
+				_resourceLog.Error(err, "failed to create subresource", "toDeploySubResource", toDeploySubResource)
 				return ctrl.Result{}, err
 			}
 
+			_, alreadyExists := existingSubresourcesHashMap[possibleResource.String()]
+			_requiredNamespaceLog.V(3).Info("does subresource exist?", "alreadyExists", alreadyExists)
+
 			// handle either the update or creation of the toDeploySubresource
-			if _, alreadyExists := existingSubresourcesHashMap[possibleResource.String()]; alreadyExists {
+			if alreadyExists {
 				// update
 				if err := reconciler.Update(ctx, toDeploySubResource); err != nil {
+					_requiredNamespaceLog.Error(err, "updating subresource failed")
 					return ctrl.Result{}, err
 				}
+				_requiredNamespaceLog.V(3).Info("updated subresource")
 			} else {
 				// create
 				if err := reconciler.Create(ctx, toDeploySubResource); err != nil {
+					_requiredNamespaceLog.Error(err, "creating subresource failed")
 					return ctrl.Result{}, err
 				}
+				_requiredNamespaceLog.V(3).Info("created subresource")
 			}
 
-			// TODO: implement an updating mechanism, that keeps the current state in the simplereplicators status fields
+			// update the state of the created/updated resource in the status
+			var objRef = status.FromObject(toDeploySubResource)
+			simpleReplicator.Status.Deployed[objRef.String()] = objRef
 
 			// remove the items from the hashmaps
 			delete(requiredNamespacesHashMap, requiredNSKey)
