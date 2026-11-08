@@ -351,7 +351,18 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"deployedResourceStatus", deployedResourceStatus,
 		)
 
-		_baseLog.Info("successfully created resource-replicas in required namespaces")
+		_statusObjectDeleteLog.Info("handling objectRef from statusfield")
+
+		/*
+			TODO: implement a way to scan the deployed map from the status field, to search for objects that are still deployed,
+						but possibily forgotten, due to removal from the spec.Resources field. If an object gets removed from that list
+						it will not be processed anymore by the reconciliation, because the routine does not know the resource has been
+						existing before. therefore most subresource will probably still exist in the cluster.
+
+						to remove those objcts we have to scan the status field from the simplereplicator object, to check whether there
+						are still objects in the cluster, which do not have an related resource definition within the spec.resources.
+		*/
+
 	}
 
 	_baseLog.Info("successfully created resource-replicas in required namespaces")
