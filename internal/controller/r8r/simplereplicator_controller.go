@@ -26,6 +26,7 @@ package r8r
 
 import (
 	"context"
+	"maps"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,6 +40,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
 	"github.com/jnnkrdb/r8r/pkg/generics"
@@ -132,162 +134,171 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// request a list of namespaces, to parse through the list and
 	// then check every namespace with the give item
-	allNamespacesHashMap, err := reconciler.ListAsHashMap(ctx, &corev1.NamespaceList{}, generics.KeyFuncNamespaceName)
+	allNamespacesHashMap_primary, err := reconciler.ListAsHashMap(ctx, &corev1.NamespaceList{}, generics.KeyFuncNamespaceName)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	_baseLog.V(5).Info("allNamespacesHashMap content", "allNamespacesHashMap", allNamespacesHashMap)
-
-	//var allNamespaces = &corev1.NamespaceList{}
-	//if err := reconciler.List(ctx, allNamespaces); err != nil {
-	//	return ctrl.Result{}, err
-	//}
-	//_baseLog.V(5).Info("allNamespaces content", "*allNamespaces", *allNamespaces)
-	//
-	//allNamespacesHashMap, err := generics.ObjectListToMap(allNamespaces, func(o client.Object) string {
-	//	return o.GetName()
-	//})
-	//if err != nil {
-	//	return ctrl.Result{}, err
-	//}
-	//_baseLog.V(5).Info("allNamespacesHashMap content", "allNamespacesHashMap", allNamespacesHashMap)
+	_baseLog.V(5).Info("allNamespacesHashMap_primary content", "allNamespacesHashMap_primary", allNamespacesHashMap_primary)
 
 	// request a list of namespaces, which are required to inherit the defined object
-	requiredNamespacesHashMap, err := reconciler.ListAsHashMapWithLabelSelector(
+	requiredNamespacesHashMap_primary, err := reconciler.ListAsHashMapWithLabelSelector(
 		ctx, &corev1.NamespaceList{}, generics.KeyFuncNamespaceName, simpleReplicator.Spec.Selector.LabelSelector)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	_baseLog.V(5).Info("requiredNamespacesHashMap content", "requiredNamespacesHashMap", requiredNamespacesHashMap)
+	_baseLog.V(5).Info("requiredNamespacesHashMap_primary content",
+		"requiredNamespacesHashMap_primary", requiredNamespacesHashMap_primary)
 
-	//var requiredNamespaces = &corev1.NamespaceList{}
-	//if err := reconciler.ListWithLabelSelector(
-	//	ctx, requiredNamespaces, simpleReplicator.Spec.Selector.LabelSelector); err != nil {
-	//	return ctrl.Result{}, err
-	//}
-	//_baseLog.V(5).Info("requiredNamespaces content", "*requiredNamespaces", *requiredNamespaces)
-	//
-	//requiredNamespacesHashMap, err := generics.ObjectListToMap(requiredNamespaces, func(o client.Object) string {
-	//	return o.GetName()
-	//})
-	//if err != nil {
-	//	return ctrl.Result{}, err
-	//}
-	//_baseLog.V(5).Info("requiredNamespacesHashMap content", "requiredNamespacesHashMap", requiredNamespacesHashMap)
+	/*
+		at this point in time, we have two required hashmaps already:
 
-	// for every resource in the reources list, check if it has to be created/updated/deleted in any namespace
-	for _, _resource := range simpleReplicator.Spec.Resources {
+		1. allNamespacesHashMap_primary
+		  -> contains all namespaces from the cluster.
+
+		2. requiredNamespacesHashMap_primary
+		  -> contains all namespaces, in which the resources should be deployed.
+				 this counts for all resources from the resources list.
+
+		since these two lists affect all resources, they will be fetched outside of the resources loop and
+		each resources then receives an own copy of the corresponding hashmap
+
+	*/
+
+	// creating a sub function to utilize defer funcs and return options
+	subResourceReconciliation := func(_r unstructured.Unstructured) (ctrl.Result, error) {
 
 		var _resourceLog = _baseLog.WithValues(
-			"currentResource.GroupVersionKind", _resource.GroupVersionKind().String(),
-			"currentResource.Name", _resource.GetName(),
+			"currentResource.GroupVersionKind", _r.GroupVersionKind().String(),
+			"currentResource.Name", _r.GetName(),
 		)
 		_resourceLog.Info("handling resource")
 
+		// prepare the required hashmaps for the currently active sub resource
+		// with maps.Clone() we are able to copy the maps data, without touching the
+		// original map.
+		// with the defer function we ensure, that the reference can be collected safely
+		// from the garbage collector and will not be used after the function drops
+		//var allNamespacesHashMap = maps.Clone(allNamespacesHashMap_primary)
+		var requiredNamespacesHashMap = maps.Clone(requiredNamespacesHashMap_primary)
+		defer func() {
+			//allNamespacesHashMap = nil
+			requiredNamespacesHashMap = nil
+		}()
+
 		// get resources, that are directly linked to the simplereplicator, due to set labels
-		subresourcesHashMap, err := reconciler.ListAsHashMapWithLabelSelector(
-			ctx, helpers.UnstructuredListFromObject(_resource), generics.KeyFuncNamespaceName, &metav1.LabelSelector{
-				MatchLabels: reconciler.GetOwnerLabels(_resource.GetLabels()),
+		existingSubresourcesHashMap, err := reconciler.ListAsHashMapWithLabelSelector(
+			ctx, helpers.UnstructuredListFromObject(_r), generics.KeyFuncNamespaceName, &metav1.LabelSelector{
+				MatchLabels: reconciler.GetOwnerLabels(_r.GetLabels()),
 			})
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		_resourceLog.V(5).Info("subresourcesHashMap content", "subresourcesHashMap", subresourcesHashMap)
+		_resourceLog.V(5).Info("existingSubresourcesHashMap content", "existingSubresourcesHashMap", existingSubresourcesHashMap)
 
-		//var unstructuredList = helpers.UnstructuredListFromObject(_resource)
-		//if err := reconciler.ListWithLabelSelector(ctx, unstructuredList, &metav1.LabelSelector{
-		//	MatchLabels: reconciler.GetOwnerLabels(_resource.GetLabels()),
-		//}); err != nil {
-		//	return ctrl.Result{}, err
-		//}
-		//_resourceLog.V(5).Info("unstructuredList content", "*unstructuredList", *unstructuredList)
-		//
-		//// parse the list to a map type to check like in a hashmap
-		//subresourcesHashMap, err := generics.ObjectListToMap(unstructuredList, func(o client.Object) string {
-		//	return o.GetNamespace() + "/" + o.GetName()
-		//})
-		//if err != nil {
-		//	return ctrl.Result{}, err
-		//}
-		//_resourceLog.V(5).Info("subresourcesHashMap content", "subresourcesHashMap", subresourcesHashMap)
+		/*
+			after the successful request for the existingSubresourcesHashMap we have the three hashmaps, to
+			run all possible functions for the current subresource
 
-		// parse through all namespaces in the cluster and check, whether
-		// the object has to be created, updated or deleted from the namespace.
-		for _, _namespace := range allNamespacesHashMap {
+			1. create or update
+					to check whether we have to create or update a resource, we just parse through the required namespaces hashmap and check,
+					with the given resource, whether there already is something deployed in the cluster (via the existingSubresourcesHashMap).
+					if something is already deployed, we update the subresource in the cluster, if the subresource is not found in the hashmap,
+					then we create a new subresource in the cluster.
+					after this process we remove the resource from the existingSubresourcesHashMap and the namespace from the requiredNamespacesHashMap
 
-			var _namespaceLog = _resourceLog.WithValues("destinationNamespace", _namespace.GetName())
+					after that, we will have left the required namespaces hashmap, which shouldnt hold any objects anymore, and the existingSubresourcesHashMap
+					which could still contain items within. those items then will be deleted in step two, since the will not be required in the cluster anymore
 
-			// verify, whether an object already exists in the cluster, that is related to the simpleReplicator object
-			var doesExist bool = false
-			_, doesExist = subresourcesHashMap[_namespace.GetName()+"/"+_resource.GetName()]
+			2. delete (if the labelselector changes, and the namespace shouldn't hold the item anymore)
+					delete (if there were changes in the resources list of the simplereplicator, we need to check the status deployments)
+		*/
 
-			// verify whether an resource does exist and should exist
-			//doesExist, err := reconciler.DoesObjectExist(ctx, subResource)
-			//if err != nil {
-			//	return ctrl.Result{}, err
-			//}
+		// parse through the required namespaces hashmap (the original), to handle create and update requests
+		for requiredNSKey := range requiredNamespacesHashMap_primary {
 
-			var shouldExist bool = false
-			_, shouldExist = requiredNamespacesHashMap[_namespace.GetName()]
-
-			//for _, _item := range requiredNamespaces.Items {
-			//	if shouldExist = (_item.GetName() == _namespace.GetName()); shouldExist {
-			//		break
-			//	}
-			//}
-
-			_namespaceLog.V(3).Info("live-state/desired-state for resource calculated",
-				"shouldExist", shouldExist,
-				"doesExist", doesExist,
-			)
-
-			// case 1: resource should not exist and does not exist -> ignore
-			if !shouldExist && !doesExist {
-				_namespaceLog.V(3).Info("nothing has to be done")
-				continue
+			var possibleResource = types.NamespacedName{
+				Namespace: requiredNamespacesHashMap[requiredNSKey].GetName(),
+				Name:      _r.GetName(),
 			}
 
-			// prepare subResource for cluster write interactions
-			subResource, err := reconciler.CreateSubResource(_resource, _namespace.GetName())
+			_requiredNamespaceLog := _resourceLog.WithValues(
+				"requiredNSKey", requiredNSKey,
+				"possibleResource", possibleResource,
+			)
+
+			_requiredNamespaceLog.V(3).Info("handle required namespace")
+
+			// create the new/updated version of the to-deploy subresource
+			toDeploySubResource, err := reconciler.CreateSubResource(_r, possibleResource.Namespace)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
-			_namespaceLog.V(5).Info("subResource content", "*subResource", subResource)
 
-			// case 2: resource should exist, but does not exist -> create
-			if shouldExist && !doesExist {
-				if err := reconciler.Create(ctx, subResource); err != nil {
+			// handle either the update or creation of the toDeploySubresource
+			if _, alreadyExists := existingSubresourcesHashMap[possibleResource.String()]; alreadyExists {
+				// update
+				if err := reconciler.Update(ctx, toDeploySubResource); err != nil {
 					return ctrl.Result{}, err
 				}
-				continue
-			}
-
-			// if the object does exist, and either should be updated or deleted,
-			// check if the owner is in fact the clusterobject
-			// TODO: check whether this is the correct place to check if the object is owned by the simplereplicator object
-			if !metav1.IsControlledBy(subResource, simpleReplicator) {
-				_namespaceLog.Info("object does not contain ownerreference")
-				continue
-			}
-
-			// case 3: resource should exist and does exist and is owned by parent resources -> update
-			if shouldExist && doesExist {
-				if err := reconciler.Update(ctx, subResource); err != nil {
+			} else {
+				// create
+				if err := reconciler.Create(ctx, toDeploySubResource); err != nil {
 					return ctrl.Result{}, err
 				}
-				continue
 			}
 
-			// case 4: resource should not exist, does exist and is owned by parent resource -> delete
-			if !shouldExist && doesExist {
-				if err := reconciler.Delete(ctx, subResource); err != nil {
-					return ctrl.Result{}, err
-				}
-				continue
-			}
+			// TODO: implement an updating mechanism, that keeps the current state in the simplereplicators status fields
+
+			// remove the items from the hashmaps
+			delete(requiredNamespacesHashMap, requiredNSKey)
+			delete(existingSubresourcesHashMap, possibleResource.String())
 		}
+
+		_resourceLog.V(5).Info("following items are left in the important hashmaps",
+			"requiredNamespacesHashMap", requiredNamespacesHashMap,
+			"existingSubresourcesHashMap", existingSubresourcesHashMap,
+		)
+
+		// TODO: implement the deletion steps of the sub resources, which shouldn't exist anymore
+
+		return ctrl.Result{}, nil
 	}
 
+	// for every resource in the reources list, check if it has to be created/updated/deleted in any namespace
+	for _, _resource := range simpleReplicator.Spec.Resources {
+
+		// run the subresource reconciliation function
+		if result, err := subResourceReconciliation(_resource); err != nil {
+			return result, err
+		}
+
+		// parse through all namespaces in the cluster and check, whether
+		// the object has to be created, updated or deleted from the namespace.
+
+		// this handles the deletion now
+		/*
+			for _, _namespace := range allNamespacesHashMap {
+
+				var _namespaceLog = _resourceLog.WithValues("destinationNamespace", _namespace.GetName())
+
+				// if the object does exist, and either should be updated or deleted,
+				// check if the owner is in fact the clusterobject
+				// TODO: check whether this is the correct place to check if the object is owned by the simplereplicator object
+				if !metav1.IsControlledBy(subResource, simpleReplicator) {
+					_namespaceLog.Info("object does not contain ownerreference")
+					continue
+				}
+
+				// case 4: resource should not exist, does exist and is owned by parent resource -> delete
+				if !shouldExist && doesExist {
+					if err := reconciler.Delete(ctx, subResource); err != nil {
+						return ctrl.Result{}, err
+					}
+					continue
+				}
+			}
+		*/
+	}
 	_baseLog.Info("successfully created resource-replicas in required namespaces")
 
 	r.GetRecorder().Eventf(
@@ -296,10 +307,4 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		"ReplicateResources", "successfully finished reconciliation of simplereplicator resources.")
 
 	return ctrl.Result{}, nil
-	//statushandler.SetCondition(metav1.Condition{
-	//	Type:    status.Condition_Complete,
-	//	Status:  metav1.ConditionTrue,
-	//	Reason:  "ReplicatedResource",
-	//	Message: "successfully replicated resource among required namespaces",
-	//})
 }
