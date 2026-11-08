@@ -270,6 +270,9 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 			// update the state of the created/updated resource in the status
 			var objRef = status.FromObject(toDeploySubResource)
+			if simpleReplicator.Status.Deployed == nil {
+				simpleReplicator.Status.Deployed = make(map[string]status.ObjectReference)
+			}
 			simpleReplicator.Status.Deployed[objRef.String()] = objRef
 
 			// remove the items from the hashmaps
