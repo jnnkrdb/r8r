@@ -42,6 +42,9 @@ type SimpleReplicatorStatus struct {
 	// For Kubernetes API conventions, see:
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 	status.DefaultStatusFields `json:",inline"`
+
+	// +optional
+	Deployed map[string]status.ObjectReference `json:"deployed,omitempty"`
 }
 
 // +kubebuilder:object:root=true
