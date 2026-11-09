@@ -148,7 +148,7 @@ func (in *SimpleReplicatorStatus) DeepCopyInto(out *SimpleReplicatorStatus) {
 	in.DefaultStatusFields.DeepCopyInto(&out.DefaultStatusFields)
 	if in.Deployed != nil {
 		in, out := &in.Deployed, &out.Deployed
-		*out = make(map[string]status.ObjectReference, len(*in))
+		*out = make(status.ObjectReferenceMap, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
 		}
