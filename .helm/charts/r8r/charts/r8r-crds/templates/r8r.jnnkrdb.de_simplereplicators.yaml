@@ -185,32 +185,10 @@ spec:
                 x-kubernetes-list-type: map
               deployed:
                 additionalProperties:
-                  description: |-
-                    this object store holds the bare minimum information to get an
-                    unstructured.Unstructured{} object from the cluster
-                    the UID in this case is optional
-                  properties:
-                    apiVersion:
-                      type: string
-                    kind:
-                      type: string
-                    name:
-                      type: string
-                    namespace:
-                      type: string
-                    uid:
-                      description: |-
-                        UID is a type that holds unique ID values, including UUIDs.  Because we
-                        don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                        intent and helps make sure that UIDs and names do not get conflated.
-                      type: string
-                  required:
-                  - apiVersion
-                  - kind
-                  - name
-                  type: object
+                  description: the actual reference from the object in the cluster
+                  type: string
+                description: the map containing the references
                 type: object
-            type: object
             type: object
         required:
         - spec

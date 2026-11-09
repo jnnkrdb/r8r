@@ -133,7 +133,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// this is required, since there may be the chance its the first time the simplereplicator object
 	// gets reconciled
 	if simpleReplicator.Status.Deployed == nil {
-		simpleReplicator.Status.Deployed = make(map[string]status.ObjectReference)
+		simpleReplicator.Status.Deployed = make(status.ObjectReferenceMap)
 	}
 
 	// create a defer function to patch the status fields, even when one resource fails to be reconciled
@@ -287,8 +287,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 
 			// update the state of the created/updated resource in the status
-			var objRef = status.FromObject(toDeploySubResource)
-			simpleReplicator.Status.Deployed[objRef.String()] = objRef
+			simpleReplicator.Status.Deployed.Append(toDeploySubResource)
 
 			// remove the items from the hashmaps
 			delete(requiredNamespacesHashMap, requiredNSKey)
@@ -327,7 +326,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 
 			// since the object might be inside of the statusfiled, we have to remove it there as well
-			delete(simpleReplicator.Status.Deployed, status.KeyFromObject(toDeleteObject))
+			simpleReplicator.Status.Deployed.Delete(toDeleteObject)
 		}
 
 		return ctrl.Result{}, nil
@@ -335,7 +334,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// for every resource in the reources list, check if it has to be created/updated/deleted in any namespace
 	for _, _resource := range simpleReplicator.Spec.Resources {
-
 		// run the subresource reconciliation function
 		if result, err := subResourceReconciliation(_resource); err != nil {
 			return result, err
@@ -344,14 +342,28 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// now parse through all objects within the status filed, to determine, whether there are objects in the cluster
 	// which shouldn't exist from the specifications of the current state of the simplereplicator object
-	for deployedResourceStatusKey, deployedResourceStatus := range simpleReplicator.Status.Deployed {
+	simpleReplicator.Status.Deployed.WalkFn(func(id types.UID, o client.Object) error {
 
-		_statusObjectDeleteLog := _baseLog.WithValues(
-			"deployedResourceStatusKey", deployedResourceStatusKey,
-			"deployedResourceStatus", deployedResourceStatus,
-		)
-
+		// prepare logging for walker function
+		_statusObjectDeleteLog := _baseLog.WithValues("deployed.id", id, "deployed.object", o)
 		_statusObjectDeleteLog.Info("handling objectRef from statusfield")
+
+		// trying to fetch the object from the cluster
+		if err := reconciler.Get(ctx, types.NamespacedName{
+			Namespace: o.GetNamespace(),
+			Name:      o.GetName(),
+		}, o); err != nil {
+			_statusObjectDeleteLog.Error(err, "fetching statusDeployedResource failed")
+			return err
+		}
+
+		_statusObjectDeleteLog.V(5).Info("received statusDeployedObject from cluster")
+
+		// if the object does exist, check if the owner is in fact the simplereplicator resource
+		if !metav1.IsControlledBy(o, simpleReplicator) {
+			_statusObjectDeleteLog.V(3).Info("object does not contain ownerreference")
+			return nil
+		}
 
 		/*
 			TODO: implement a way to scan the deployed map from the status field, to search for objects that are still deployed,
@@ -362,8 +374,8 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 						to remove those objcts we have to scan the status field from the simplereplicator object, to check whether there
 						are still objects in the cluster, which do not have an related resource definition within the spec.resources.
 		*/
-
-	}
+		return nil
+	})
 
 	_baseLog.Info("successfully created resource-replicas in required namespaces")
 
