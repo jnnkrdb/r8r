@@ -29,7 +29,6 @@ SOFTWARE.
 package v1beta1
 
 import (
-	"github.com/jnnkrdb/r8r/pkg/status"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -148,10 +147,7 @@ func (in *SimpleReplicatorStatus) DeepCopyInto(out *SimpleReplicatorStatus) {
 	in.DefaultStatusFields.DeepCopyInto(&out.DefaultStatusFields)
 	if in.Deployed != nil {
 		in, out := &in.Deployed, &out.Deployed
-		*out = make(status.ObjectReferenceMap, len(*in))
-		for key, val := range *in {
-			(*out)[key] = val
-		}
+		*out = (*in).DeepCopy()
 	}
 }
 

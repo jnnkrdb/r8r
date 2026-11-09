@@ -44,7 +44,7 @@ type SimpleReplicatorStatus struct {
 	status.DefaultStatusFields `json:",inline"`
 
 	// +optional
-	Deployed status.ObjectReferenceMap `json:"deployed,omitempty"`
+	Deployed *status.ObjectReferenceList `json:"deployed,omitempty"`
 }
 
 // +kubebuilder:object:root=true
