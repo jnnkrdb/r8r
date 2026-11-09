@@ -49,14 +49,16 @@ spec:
                       label selector matches no objects.
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
                         items:
                           description: |-
                             A label selector requirement is a selector that contains values, a key, and an operator that
                             relates the key and values.
                           properties:
                             key:
-                              description: key is the label key that the selector applies to.
+                              description: key is the label key that the selector
+                                applies to.
                               type: string
                             operator:
                               description: |-
@@ -119,7 +121,8 @@ spec:
 
                   The status of each condition is one of True, False, or Unknown.
                 items:
-                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
                   properties:
                     lastTransitionTime:
                       description: |-
@@ -176,10 +179,34 @@ spec:
                 - type
                 x-kubernetes-list-type: map
               deployed:
-                additionalProperties:
-                  description: the actual reference from the object in the cluster
-                  type: string
                 description: the map containing the references
+                properties:
+                  items:
+                    items:
+                      description: the actual reference from the object in the cluster
+                      properties:
+                        apiversion:
+                          type: string
+                        kind:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        uid:
+                          description: |-
+                            UID is a type that holds unique ID values, including UUIDs.  Because we
+                            don't ONLY use UUIDs, this is an alias to string.  Being a type captures
+                            intent and helps make sure that UIDs and names do not get conflated.
+                          type: string
+                      required:
+                      - apiversion
+                      - kind
+                      - name
+                      - namespace
+                      - uid
+                      type: object
+                    type: array
                 type: object
             type: object
         required:

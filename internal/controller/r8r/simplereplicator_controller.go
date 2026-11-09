@@ -133,7 +133,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// this is required, since there may be the chance its the first time the simplereplicator object
 	// gets reconciled
 	if simpleReplicator.Status.Deployed == nil {
-		simpleReplicator.Status.Deployed = make(status.ObjectReferenceMap)
+		simpleReplicator.Status.Deployed = &status.ObjectReferenceList{}
 	}
 
 	// create a defer function to patch the status fields, even when one resource fails to be reconciled
@@ -144,9 +144,9 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}()
 
 	// cache the current status filed deployed list, to work with the cache, without damaging the current state of the object
-	var cachedSimpleReplicatorStatusDeployedMap = maps.Clone(simpleReplicator.Status.Deployed)
-	_baseLog.V(5).Info("created a clone of the current status field deployed map",
-		"cachedSimpleReplicatorStatusDeployedMap", cachedSimpleReplicatorStatusDeployedMap)
+	var cachedSimpleReplicatorStatusDeployedList = simpleReplicator.Status.Deployed
+	_baseLog.V(5).Info("created a clone of the current status field deployed list",
+		"cachedSimpleReplicatorStatusDeployedList", cachedSimpleReplicatorStatusDeployedList)
 
 	// create the reconciliation handler
 	var reconciler = reconciliation.NewReconciliationHandler(r, simpleReplicator)
@@ -326,7 +326,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 
 			// since the object might be inside of the statusfiled, we have to remove it there as well
-			simpleReplicator.Status.Deployed.Delete(toDeleteObject)
+			simpleReplicator.Status.Deployed.Remove(toDeleteObject)
 		}
 
 		return ctrl.Result{}, nil
@@ -342,10 +342,13 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// now parse through all objects within the status filed, to determine, whether there are objects in the cluster
 	// which shouldn't exist from the specifications of the current state of the simplereplicator object
-	simpleReplicator.Status.Deployed.WalkFn(func(id types.UID, o client.Object) error {
+	for _, or := range simpleReplicator.Status.Deployed.Items {
+
+		// get object for cluster interactions
+		var o = or.GetObject()
 
 		// prepare logging for walker function
-		_statusObjectDeleteLog := _baseLog.WithValues("deployed.id", id, "deployed.object", o)
+		_statusObjectDeleteLog := _baseLog.WithValues("object", o)
 		_statusObjectDeleteLog.Info("handling objectRef from statusfield")
 
 		// trying to fetch the object from the cluster
@@ -354,7 +357,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			Name:      o.GetName(),
 		}, o); err != nil {
 			_statusObjectDeleteLog.Error(err, "fetching statusDeployedResource failed")
-			return err
 		}
 
 		_statusObjectDeleteLog.V(5).Info("received statusDeployedObject from cluster")
@@ -362,7 +364,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// if the object does exist, check if the owner is in fact the simplereplicator resource
 		if !metav1.IsControlledBy(o, simpleReplicator) {
 			_statusObjectDeleteLog.V(3).Info("object does not contain ownerreference")
-			return nil
 		}
 
 		/*
@@ -374,8 +375,8 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 						to remove those objcts we have to scan the status field from the simplereplicator object, to check whether there
 						are still objects in the cluster, which do not have an related resource definition within the spec.resources.
 		*/
-		return nil
-	})
+
+	}
 
 	_baseLog.Info("successfully created resource-replicas in required namespaces")
 
