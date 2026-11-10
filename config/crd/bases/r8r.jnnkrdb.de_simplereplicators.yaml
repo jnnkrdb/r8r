@@ -179,34 +179,23 @@ spec:
                 - type
                 x-kubernetes-list-type: map
               deployed:
-                description: the map containing the references
-                properties:
-                  items:
-                    items:
-                      description: the actual reference from the object in the cluster
-                      properties:
-                        apiversion:
-                          type: string
-                        kind:
-                          type: string
-                        name:
-                          type: string
-                        namespace:
-                          type: string
-                        uid:
-                          description: |-
-                            UID is a type that holds unique ID values, including UUIDs.  Because we
-                            don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                            intent and helps make sure that UIDs and names do not get conflated.
-                          type: string
-                      required:
-                      - apiversion
-                      - kind
-                      - name
-                      - namespace
-                      - uid
-                      type: object
-                    type: array
+                additionalProperties:
+                  description: the actual reference from the object in the cluster
+                  properties:
+                    apiversion:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - apiversion
+                  - kind
+                  - name
+                  - namespace
+                  type: object
                 type: object
             type: object
         required:
