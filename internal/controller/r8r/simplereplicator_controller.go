@@ -343,7 +343,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		var o = or.GetObject()
 
 		// prepare logging for walker function
-		_statusObjectDeleteLog := _baseLog.WithValues("object", o, "object.uid", uid)
+		_statusObjectDeleteLog := _baseLog.WithValues("objectReference", or, "object.uid", uid)
 		_statusObjectDeleteLog.Info("handling objectRef from statusfield")
 
 		// trying to fetch the object from the cluster
@@ -354,11 +354,17 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			_statusObjectDeleteLog.Error(err, "fetching statusDeployedResource failed")
 		}
 
-		_statusObjectDeleteLog.V(5).Info("received statusDeployedObject from cluster")
+		_statusObjectDeleteLog.V(5).Info("received statusDeployedObject from cluster",
+			"objectFromCluster", o)
 
 		// if the object does exist, check if the owner is in fact the simplereplicator resource
-		if !metav1.IsControlledBy(o, simpleReplicator) {
+		var isControlledBy = metav1.IsControlledBy(o, simpleReplicator)
+		_statusObjectDeleteLog.V(5).Info("is object controlled by simplereplicator object",
+			"isControlledBy", isControlledBy)
+		if !isControlledBy {
 			_statusObjectDeleteLog.V(3).Info("object does not contain ownerreference")
+
+			// ignore object, because it is not own by the simplereplicator object
 		}
 
 		/*
