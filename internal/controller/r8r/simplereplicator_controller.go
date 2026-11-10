@@ -128,6 +128,10 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 	_baseLog.V(5).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
+	_baseLog = _baseLog.WithValues(
+		"simpleReplicator.uid", simpleReplicator.GetUID(),
+		"simpleReplicator.resourceversion", simpleReplicator.GetResourceVersion(),
+	)
 
 	// prepare the status field of the simplereplicator resource, so the deployed map is ready for usage
 	// this is required, since there may be the chance its the first time the simplereplicator object
