@@ -132,8 +132,8 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// prepare the status field of the simplereplicator resource, so the deployed map is ready for usage
 	// this is required, since there may be the chance its the first time the simplereplicator object
 	// gets reconciled
-	if simpleReplicator.Status.Deployed == nil {
-		simpleReplicator.Status.Deployed = &status.ObjectReferenceList{}
+	if simpleReplicator.Status.DeployedItems == nil {
+		simpleReplicator.Status.DeployedItems = make(map[types.UID]status.ObjectReference)
 	}
 
 	// create a defer function to patch the status fields, even when one resource fails to be reconciled
@@ -143,23 +143,18 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}()
 
-	// cache the current status filed deployed list, to work with the cache, without damaging the current state of the object
-	var cachedSimpleReplicatorStatusDeployedList = simpleReplicator.Status.Deployed
-	_baseLog.V(5).Info("created a clone of the current status field deployed list",
-		"cachedSimpleReplicatorStatusDeployedList", cachedSimpleReplicatorStatusDeployedList)
-
 	// create the reconciliation handler
 	var reconciler = reconciliation.NewReconciliationHandler(r, simpleReplicator)
 	_baseLog.V(5).Info("initialized reconciler", "*reconciler", *reconciler)
 
 	// request a list of namespaces, to parse through the list and
 	// then check every namespace with the give item
-	allNamespacesHashMap_primary, err := reconciler.ListAsHashMap(ctx, &corev1.NamespaceList{}, generics.KeyFuncNamespaceName)
-	if err != nil {
-		_baseLog.Error(err, "creating allNamespacesHashMap_primary")
-		return ctrl.Result{}, err
-	}
-	_baseLog.V(5).Info("allNamespacesHashMap_primary content", "allNamespacesHashMap_primary", allNamespacesHashMap_primary)
+	//allNamespacesHashMap_primary, err := reconciler.ListAsHashMap(ctx, &corev1.NamespaceList{}, generics.KeyFuncNamespaceName)
+	//if err != nil {
+	//	_baseLog.Error(err, "creating allNamespacesHashMap_primary")
+	//	return ctrl.Result{}, err
+	//}
+	//_baseLog.V(5).Info("allNamespacesHashMap_primary content", "allNamespacesHashMap_primary", allNamespacesHashMap_primary)
 
 	// request a list of namespaces, which are required to inherit the defined object
 	requiredNamespacesHashMap_primary, err := reconciler.ListAsHashMapWithLabelSelector(
@@ -287,7 +282,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 
 			// update the state of the created/updated resource in the status
-			simpleReplicator.Status.Deployed.Append(toDeploySubResource)
+			simpleReplicator.Status.DeployedItems[toDeploySubResource.GetUID()] = status.ObjectReferenceFromObject(toDeploySubResource)
 
 			// remove the items from the hashmaps
 			delete(requiredNamespacesHashMap, requiredNSKey)
@@ -325,8 +320,8 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				return ctrl.Result{}, err
 			}
 
-			// since the object might be inside of the statusfiled, we have to remove it there as well
-			simpleReplicator.Status.Deployed.Remove(toDeleteObject)
+			// since the object might be inside of the statusfield, we have to remove it there as well
+			delete(simpleReplicator.Status.DeployedItems, toDeleteObject.GetUID())
 		}
 
 		return ctrl.Result{}, nil
@@ -342,13 +337,13 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// now parse through all objects within the status filed, to determine, whether there are objects in the cluster
 	// which shouldn't exist from the specifications of the current state of the simplereplicator object
-	for _, or := range simpleReplicator.Status.Deployed.Items {
+	for uid, or := range simpleReplicator.Status.DeployedItems {
 
 		// get object for cluster interactions
 		var o = or.GetObject()
 
 		// prepare logging for walker function
-		_statusObjectDeleteLog := _baseLog.WithValues("object", o)
+		_statusObjectDeleteLog := _baseLog.WithValues("object", o, "object.uid", uid)
 		_statusObjectDeleteLog.Info("handling objectRef from statusfield")
 
 		// trying to fetch the object from the cluster
