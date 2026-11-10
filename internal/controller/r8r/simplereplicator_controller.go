@@ -339,15 +339,19 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
-	// now parse through all objects within the status filed, to determine, whether there are objects in the cluster
-	// which shouldn't exist from the specifications of the current state of the simplereplicator object
-	for uid, or := range simpleReplicator.Status.DeployedItems {
+	// create the delete function, that removes the object from the cluster and then from the simplereplicators status
+	deleteRelatedObjectWithoutTemplate := func(statusKey types.UID, o client.Object) error {
+		if err := reconciler.Delete(ctx, o); err != nil {
+			return err
+		}
+		delete(simpleReplicator.Status.DeployedItems, statusKey)
+		return nil
+	}
 
-		// get object for cluster interactions
-		var o = or.GetObject()
+	handleStatusObject := func(statusKey types.UID, o client.Object) error {
 
 		// prepare logging for walker function
-		_statusObjectDeleteLog := _baseLog.WithValues("objectReference", or, "object.uid", uid)
+		_statusObjectDeleteLog := _baseLog.WithValues("object", o, "object.uid", statusKey)
 		_statusObjectDeleteLog.Info("handling objectRef from statusfield")
 
 		// trying to fetch the object from the cluster
@@ -362,14 +366,44 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"objectFromCluster", o)
 
 		// if the object does exist, check if the owner is in fact the simplereplicator resource
-		var isControlledBy = metav1.IsControlledBy(o, simpleReplicator)
-		_statusObjectDeleteLog.V(5).Info("is object controlled by simplereplicator object",
-			"isControlledBy", isControlledBy)
-		if !isControlledBy {
-			_statusObjectDeleteLog.V(3).Info("object does not contain ownerreference")
-
-			// ignore object, because it is not own by the simplereplicator object
+		if isControlledBy := metav1.IsControlledBy(o, simpleReplicator); !isControlledBy {
+			_statusObjectDeleteLog.V(3).Info("object does not contain ownerreference -> ignoring",
+				"isControlledBy", isControlledBy)
+			return nil
 		}
+
+		_statusObjectDeleteLog.V(5).Info("checking whether the object is defined in the .spec.resources list")
+
+		// check whether the current object from the status.deployedItems has a related template in the .spec.resources list
+		// if this is not the case, then we can outright delete the item and remove it from the statusfield
+		// default is "false" in this case, because we think there is no corresponding item, so that the spec.resources list
+		// has to "prove" there is an related object defined
+		var similarObjectDescribedInSpecResourcesList bool = false
+		for _, _dr := range simpleReplicator.Spec.Resources {
+			var current client.Object = &_dr
+
+			_statusObjectDeleteLog.V(5).Info("compare item with current .spec.resources list item",
+				"current.GroupVersionKind", current.GetObjectKind().GroupVersionKind(),
+				"current.Name", current.GetName(),
+			)
+
+			// check wether there is a defined resource of that type within the defined resources in the specs
+			if current.GetObjectKind().GroupVersionKind() == o.GetObjectKind().GroupVersionKind() &&
+				current.GetName() == o.GetName() {
+
+				similarObjectDescribedInSpecResourcesList = true
+				break
+			}
+		}
+
+		if !similarObjectDescribedInSpecResourcesList {
+			_statusObjectDeleteLog.V(3).Info("no related object in .spec.resources list",
+				"similarObjectDescribedInSpecResourcesList", similarObjectDescribedInSpecResourcesList)
+
+			return deleteRelatedObjectWithoutTemplate(statusKey, o)
+		}
+
+		_statusObjectDeleteLog.V(5).Info("checking whether the simplereplicator object also matches the namespace")
 
 		/*
 			TODO: implement a way to scan the deployed map from the status field, to search for objects that are still deployed,
@@ -380,6 +414,13 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 						to remove those objcts we have to scan the status field from the simplereplicator object, to check whether there
 						are still objects in the cluster, which do not have an related resource definition within the spec.resources.
 		*/
+		return nil
+	}
+
+	// now parse through all objects within the status filed, to determine, whether there are objects in the cluster
+	// which shouldn't exist from the specifications of the current state of the simplereplicator object
+	for uid, or := range simpleReplicator.Status.DeployedItems {
+		handleStatusObject(uid, or.GetObject())
 
 	}
 
