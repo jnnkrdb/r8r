@@ -149,16 +149,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// create the reconciliation handler
 	var reconciler = reconciliation.NewReconciliationHandler(r, simpleReplicator)
-	_baseLog.V(5).Info("initialized reconciler", "*reconciler", *reconciler)
-
-	// request a list of namespaces, to parse through the list and
-	// then check every namespace with the give item
-	//allNamespacesHashMap_primary, err := reconciler.ListAsHashMap(ctx, &corev1.NamespaceList{}, generics.KeyFuncNamespaceName)
-	//if err != nil {
-	//	_baseLog.Error(err, "creating allNamespacesHashMap_primary")
-	//	return ctrl.Result{}, err
-	//}
-	//_baseLog.V(5).Info("allNamespacesHashMap_primary content", "allNamespacesHashMap_primary", allNamespacesHashMap_primary)
+	_baseLog.V(5).Info("initialized reconciler", "reconciler", reconciler)
 
 	// request a list of namespaces, which are required to inherit the defined object
 	requiredNamespacesHashMap_primary, err := reconciler.ListAsHashMapWithLabelSelector(
@@ -170,27 +161,14 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	_baseLog.V(5).Info("requiredNamespacesHashMap_primary content",
 		"requiredNamespacesHashMap_primary", requiredNamespacesHashMap_primary)
 
-	/*
-		at this point in time, we have two required hashmaps already:
-
-		1. allNamespacesHashMap_primary
-		  -> contains all namespaces from the cluster.
-
-		2. requiredNamespacesHashMap_primary
-		  -> contains all namespaces, in which the resources should be deployed.
-				 this counts for all resources from the resources list.
-
-		since these two lists affect all resources, they will be fetched outside of the resources loop and
-		each resources then receives an own copy of the corresponding hashmap
-
-	*/
-
 	// creating a sub function to utilize defer funcs and return options
 	subResourceReconciliation := func(_r unstructured.Unstructured) (ctrl.Result, error) {
 
 		var _resourceLog = _baseLog.WithValues(
-			"currentResource.GroupVersionKind", _r.GroupVersionKind().String(),
-			"currentResource.Name", _r.GetName(),
+			"current-resource", map[string]string{
+				"group-version-kind": _r.GroupVersionKind().String(),
+				"name":               _r.GetName(),
+			},
 		)
 		_resourceLog.Info("handling resource")
 
@@ -200,7 +178,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// with the defer function we ensure, that the reference can be collected safely
 		// from the garbage collector and will not be used after the function drops
 
-		//var allNamespacesHashMap = maps.Clone(allNamespacesHashMap_primary)
 		var requiredNamespacesHashMap = maps.Clone(requiredNamespacesHashMap_primary)
 		defer func() {
 			//allNamespacesHashMap = nil
