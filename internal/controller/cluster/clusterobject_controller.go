@@ -26,6 +26,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -40,9 +41,9 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/cluster/v1alpha1"
-	"github.com/jnnkrdb/r8r/pkg/reconciliation/checks"
 	"github.com/jnnkrdb/r8r/pkg/status"
 )
 
@@ -144,7 +145,7 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, statushandler.ThrowEventWithConditionOnError(
 			err,
 			nil,
-			status.EventType_Warning,
+			"Warning",
 			"NamespaceGathering",
 			"Error Gathering Namespaces",
 			"error fetching list of namespaces from cluster: %v", err,
@@ -157,7 +158,7 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, statushandler.ThrowEventWithConditionOnError(
 			err,
 			nil,
-			status.EventType_Warning,
+			"Warning",
 			"LabelSelectorFetching",
 			"Error Fetching LabelSelector",
 			"error fetching label selector from clusterobject: %v", err,
@@ -169,7 +170,7 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, statushandler.ThrowEventWithConditionOnError(
 			err,
 			nil,
-			status.EventType_Warning,
+			"Warning",
 			"NamespaceGathering",
 			"Error Gathering Namespaces",
 			"error fetching list of namespaces from cluster: %v", err,
@@ -199,13 +200,13 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	statushandler.ThrowEvent(
 		nil,
-		status.EventType_Normal,
+		"Normal",
 		"ReplicateResource",
 		"Replicated Resource",
 		"successfully created resource-replicas in required namespaces")
 
 	return ctrl.Result{}, statushandler.SetCondition(metav1.Condition{
-		Type:    status.Condition_Complete,
+		Type:    "Complete",
 		Status:  metav1.ConditionTrue,
 		Reason:  "ReplicatedResource",
 		Message: "successfully replicated resource among required namespaces",
@@ -241,14 +242,13 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 		"clusterObject.Replicator.Resource", clusterObject.Replicator.Resource)
 
 	// check, if the object does exist in the namespace and copy its content to cache
-	doesExist, err := checks.VerifyObjectExistence(
-		ctx, r.GetClient(), namespace.GetName(), typedObject.GetName(), typedObject)
+	doesExist, err := r.verifyObjectExistence(ctx, namespace.GetName(), typedObject.GetName(), typedObject)
 
 	if err != nil {
 		return statushandler.ThrowEventWithConditionOnError(
 			err,
 			nil,
-			status.EventType_Warning,
+			"Warning",
 			"ClusterObjectFetching",
 			"Error Fetching ClusterObject",
 			"error fetching cluster object from cluster: %v", err,
@@ -256,12 +256,12 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 	}
 
 	// check, if the object should exist in the namespace
-	shouldExist, err := checks.ShouldObjectExist(namespace, requiredNamespaces)
+	shouldExist, err := r.shouldObjectExist(namespace, requiredNamespaces)
 	if err != nil {
 		return statushandler.ThrowEventWithConditionOnError(
 			err,
 			nil,
-			status.EventType_Warning,
+			"Warning",
 			"ClusterObjectFetching",
 			"Error Fetching ClusterObject",
 			"error checking if the object should exist in the namespace: %v", err,
@@ -291,7 +291,7 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 			return statushandler.ThrowEventWithConditionOnError(
 				err,
 				nil,
-				status.EventType_Warning,
+				"Warning",
 				"OwnerReferenceConfiguration",
 				"Error Setting Owner Reference",
 				"error setting owner reference: %v", err,
@@ -303,7 +303,7 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 			return statushandler.ThrowEventWithConditionOnError(
 				err,
 				nil,
-				status.EventType_Warning,
+				"Warning",
 				"ObjectCreation",
 				"Error Creating Object",
 				"error creating object in namespace: %v", err,
@@ -330,7 +330,7 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 			return statushandler.ThrowEventWithConditionOnError(
 				err,
 				nil,
-				status.EventType_Warning,
+				"Warning",
 				"OwnerReferenceConfiguration",
 				"Error Setting Owner Reference",
 				"error setting owner reference: %v", err,
@@ -342,7 +342,7 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 			return statushandler.ThrowEventWithConditionOnError(
 				err,
 				nil,
-				status.EventType_Warning,
+				"Warning",
 				"ObjectUpdate",
 				"Error Updating Object",
 				"error updating object in namespace: %v", err,
@@ -357,7 +357,7 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 			return statushandler.ThrowEventWithConditionOnError(
 				err,
 				nil,
-				status.EventType_Warning,
+				"Warning",
 				"ObjectDeletion",
 				"Error Deleting Object",
 				"error deleting object in namespace: %v", err,
@@ -366,4 +366,49 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 	}
 
 	return nil
+}
+
+// helpers
+
+func (r *ClusterObjectReconciler) shouldObjectExist(
+	namespace corev1.Namespace,
+	requiredNamespaces *corev1.NamespaceList) (bool, error) {
+
+	if requiredNamespaces == nil {
+		return false, fmt.Errorf("requiredNamespaces cannot be nil")
+	}
+
+	for _, checkingNamespace := range requiredNamespaces.Items {
+
+		if checkingNamespace.GetName() == namespace.GetName() {
+
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// this function is used to check whether a specific object exists in the cluster or not.
+// It is used to verify the existence of the object before performing any operations on it.
+func (r *ClusterObjectReconciler) verifyObjectExistence(
+	ctx context.Context,
+	namespace, name string,
+	object *unstructured.Unstructured) (bool, error) {
+
+	// fail early, when the requested scheme is empty
+	if object == nil {
+		return false, fmt.Errorf("object scheme cannot be empty")
+	}
+
+	// request the object from the cluster
+	if err := r.GetClient().Get(ctx, client.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}, object); err != nil {
+
+		return false, client.IgnoreNotFound(err)
+	}
+
+	return true, nil
 }

@@ -74,7 +74,7 @@ func (sh *StatusHandler) ThrowEventWithConditionOnError(
 	sh.ThrowEvent(relatedobject, eventtype, reason, action, note, append(args, err)...)
 
 	if e := sh.SetCondition(metav1.Condition{
-		Type:    Condition_Complete,
+		Type:    "Complete",
 		Status:  metav1.ConditionFalse,
 		Reason:  fmt.Sprintf("Failed%s", reason),
 		Message: fmt.Sprintf("%s: error: %v // args: %v", note, err, args),
