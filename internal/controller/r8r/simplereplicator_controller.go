@@ -45,7 +45,6 @@ import (
 	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
 	"github.com/jnnkrdb/r8r/pkg/generics"
 	"github.com/jnnkrdb/r8r/pkg/reconciliation"
-	"github.com/jnnkrdb/r8r/pkg/reconciliation/helpers"
 	"github.com/jnnkrdb/r8r/pkg/status"
 )
 
@@ -129,8 +128,18 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	_baseLog.V(5).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
 	_baseLog = _baseLog.WithValues(
-		"simpleReplicator.uid", simpleReplicator.GetUID(),
-		"simpleReplicator.resourceversion", simpleReplicator.GetResourceVersion(),
+		"simpleReplicator", map[string]any{
+			"metadata": map[string]any{
+				"uid":             simpleReplicator.GetUID(),
+				"resourceversion": simpleReplicator.GetResourceVersion(),
+			},
+			"spec": map[string]any{
+				"resourcesCount": len(simpleReplicator.Spec.Resources),
+			},
+			"status": map[string]any{
+				"deployedResourcesCount": len(simpleReplicator.Status.DeployedItems),
+			},
+		},
 	)
 
 	// prepare the status field of the simplereplicator resource, so the deployed map is ready for usage
@@ -165,9 +174,11 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	subResourceReconciliation := func(_r unstructured.Unstructured) (ctrl.Result, error) {
 
 		var _resourceLog = _baseLog.WithValues(
-			"current-resource", map[string]string{
-				"group-version-kind": _r.GroupVersionKind().String(),
-				"name":               _r.GetName(),
+			"currentResource", map[string]any{
+				"metadata": map[string]any{
+					"group-version-kind": _r.GroupVersionKind().String(),
+					"name":               _r.GetName(),
+				},
 			},
 		)
 		_resourceLog.Info("handling resource")
@@ -186,7 +197,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		// get resources, that are directly linked to the simplereplicator, due to set labels
 		existingSubresourcesHashMap, err := reconciler.ListAsHashMapWithLabelSelector(
-			ctx, helpers.UnstructuredListFromObject(_r), generics.KeyFuncNamespaceName, &metav1.LabelSelector{
+			ctx, generics.UnstructuredListFromObject(_r), generics.KeyFuncNamespaceName, &metav1.LabelSelector{
 				MatchLabels: reconciler.GetOwnerLabels(_r.GetLabels()),
 			})
 		if err != nil {
@@ -223,8 +234,10 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 
 			_requiredNamespaceLog := _resourceLog.WithValues(
-				"requiredNSKey", requiredNSKey,
-				"possibleResource", possibleResource,
+				"requiredNamespaceHashMap", map[string]any{
+					"key":              requiredNSKey,
+					"possibleResource": possibleResource,
+				},
 			)
 
 			_requiredNamespaceLog.V(3).Info("handle required namespace")
@@ -281,10 +294,11 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		for toDeleteObjectKey, toDeleteObject := range existingSubresourcesHashMap {
 
 			_toDeleteObjectLog := _resourceLog.WithValues(
-				"toDeleteObjectKey", toDeleteObjectKey,
-				"toDeleteObject", toDeleteObject,
+				"toDelete", map[string]any{
+					"key":    toDeleteObjectKey,
+					"object": toDeleteObject,
+				},
 			)
-
 			_toDeleteObjectLog.V(5).Info("removing object from cluster")
 
 			// this check can probably be skipped, since the existingSubresourcesHashMap already should only contain
@@ -327,16 +341,32 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	handleStatusObject := func(statusKey types.UID, o client.Object) error {
 
+		var checkedObject = types.NamespacedName{
+			Namespace: o.GetNamespace(),
+			Name:      o.GetName(),
+		}
+
 		// prepare logging for walker function
-		_statusObjectDeleteLog := _baseLog.WithValues("object", o, "object.uid", statusKey)
+		_statusObjectDeleteLog := _baseLog.WithValues(
+			"statusObject", map[string]any{
+				"key":            statusKey,
+				"namespace-name": checkedObject.String(),
+			},
+		)
 		_statusObjectDeleteLog.Info("handling objectRef from statusfield")
 
 		// trying to fetch the object from the cluster
-		if err := reconciler.Get(ctx, types.NamespacedName{
-			Namespace: o.GetNamespace(),
-			Name:      o.GetName(),
-		}, o); err != nil {
+		if err := reconciler.Get(ctx, checkedObject, o); err != nil {
+
+			// if this is an notFound error return nil
+			// that will remove the object from the statusfield
+			if client.IgnoreNotFound(err) == nil {
+				_statusObjectDeleteLog.Info("object not found")
+				return nil
+			}
+
 			_statusObjectDeleteLog.Error(err, "fetching statusDeployedResource failed")
+			return err
 		}
 
 		_statusObjectDeleteLog.V(5).Info("received statusDeployedObject from cluster",
@@ -357,16 +387,25 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// has to "prove" there is an related object defined
 		var similarObjectDescribedInSpecResourcesList bool = false
 		for _, _dr := range simpleReplicator.Spec.Resources {
-			var current client.Object = &_dr
+			var currentSpecResource client.Object = &_dr
+
+			_statusObjectDeleteLog := _baseLog.WithValues(
+				"statusObject", map[string]any{
+					"key":         statusKey,
+					"objectSpecs": o,
+				},
+			)
 
 			_statusObjectDeleteLog.V(5).Info("compare item with current .spec.resources list item",
-				"current.GroupVersionKind", current.GetObjectKind().GroupVersionKind(),
-				"current.Name", current.GetName(),
+				"currentStatusCheckedObject", map[string]any{
+					"group-version-kind": currentSpecResource.GetObjectKind().GroupVersionKind(),
+					"name":               currentSpecResource.GetName(),
+				},
 			)
 
 			// check wether there is a defined resource of that type within the defined resources in the specs
-			if current.GetObjectKind().GroupVersionKind() == o.GetObjectKind().GroupVersionKind() &&
-				current.GetName() == o.GetName() {
+			if currentSpecResource.GetObjectKind().GroupVersionKind() == o.GetObjectKind().GroupVersionKind() &&
+				currentSpecResource.GetName() == o.GetName() {
 
 				similarObjectDescribedInSpecResourcesList = true
 				break
@@ -400,7 +439,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// which shouldn't exist from the specifications of the current state of the simplereplicator object
 	for uid, or := range simpleReplicator.Status.DeployedItems {
 		handleStatusObject(uid, or.GetObject())
-
 	}
 
 	_baseLog.Info("successfully created resource-replicas in required namespaces")
