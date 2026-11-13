@@ -149,9 +149,9 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		simpleReplicator.Status.DeployedItems = make(map[types.UID]status.ObjectReference)
 	}
 
-	// create a defer function to patch the status fields, even when one resource fails to be reconciled
+	// create a defer function to update the status fields, even when one resource fails to be reconciled
 	defer func() {
-		if err := r.GetClient().Status().Patch(ctx, simpleReplicator, client.Merge); err != nil {
+		if err := r.GetClient().Status().Update(ctx, simpleReplicator); err != nil {
 			_baseLog.Error(err, "failed patching status field", "simpleReplicator.Status", simpleReplicator.Status)
 		}
 	}()
