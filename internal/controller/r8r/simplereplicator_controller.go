@@ -347,6 +347,9 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
+	// TODO: swap deletion of unwanted objects with creation and updating of wanted objects
+	// 			 there may be an issue regarding the maps nad their parsing
+
 	// now parse through all objects within the status filed, to determine, whether there are objects in the cluster
 	// which shouldn't exist from the specifications of the current state of the simplereplicator object
 	for uid, or := range simpleReplicator.Status.DeployedItems {
