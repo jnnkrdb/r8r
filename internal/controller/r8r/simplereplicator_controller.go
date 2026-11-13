@@ -126,7 +126,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		_baseLog.Error(err, "error fetching object from cluster")
 		return ctrl.Result{}, err
 	}
-	_baseLog.V(5).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
+	_baseLog.V(3).Info("simpleReplicator content", "*simpleReplicator", *simpleReplicator)
 	_baseLog = _baseLog.WithValues(
 		"simpleReplicator", map[string]any{
 			"metadata": map[string]any{
@@ -158,7 +158,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// create the reconciliation handler
 	var reconciler = reconciliation.NewReconciliationHandler(r, simpleReplicator)
-	_baseLog.V(5).Info("initialized reconciler", "reconciler", reconciler)
+	_baseLog.V(3).Info("initialized reconciler", "reconciler", reconciler)
 
 	// request a list of namespaces, which are required to inherit the defined object
 	requiredNamespacesHashMap_primary, err := reconciler.ListAsHashMapWithLabelSelector(
@@ -167,7 +167,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		_baseLog.Error(err, "creating requiredNamespacesHashMap_primary")
 		return ctrl.Result{}, err
 	}
-	_baseLog.V(5).Info("requiredNamespacesHashMap_primary content",
+	_baseLog.V(3).Info("requiredNamespacesHashMap_primary content",
 		"requiredNamespacesHashMap_primary", requiredNamespacesHashMap_primary)
 
 	// creating a sub function to utilize defer funcs and return options
@@ -191,7 +191,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		var requiredNamespacesHashMap = maps.Clone(requiredNamespacesHashMap_primary)
 		defer func() {
-			//allNamespacesHashMap = nil
 			requiredNamespacesHashMap = nil
 		}()
 
@@ -204,7 +203,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			_resourceLog.Error(err, "creating existingSubresourcesHashMap")
 			return ctrl.Result{}, err
 		}
-		_resourceLog.V(5).Info("existingSubresourcesHashMap content",
+		_resourceLog.V(3).Info("existingSubresourcesHashMap content",
 			"existingSubresourcesHashMap", existingSubresourcesHashMap)
 
 		/*
@@ -229,7 +228,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		for requiredNSKey := range requiredNamespacesHashMap_primary {
 
 			var possibleResource = types.NamespacedName{
-				Namespace: requiredNamespacesHashMap[requiredNSKey].GetName(),
+				Namespace: requiredNamespacesHashMap_primary[requiredNSKey].GetName(),
 				Name:      _r.GetName(),
 			}
 
@@ -239,7 +238,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					"possibleResource": possibleResource,
 				},
 			)
-
 			_requiredNamespaceLog.V(3).Info("handle required namespace")
 
 			// create the new/updated version of the to-deploy subresource
@@ -248,6 +246,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				_resourceLog.Error(err, "failed to create subresource in cache", "toDeploySubResource", toDeploySubResource)
 				return ctrl.Result{}, err
 			}
+			_requiredNamespaceLog.V(3).Info("created subresource in cache", "toDeploySubResource", toDeploySubResource)
 
 			objectInCluster, alreadyExists := existingSubresourcesHashMap[possibleResource.String()]
 			_requiredNamespaceLog.V(3).Info("creating/updating subresource",
@@ -272,18 +271,36 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					_requiredNamespaceLog.Error(err, "creating subresource in cluster failed")
 					return ctrl.Result{}, err
 				}
-				_requiredNamespaceLog.V(3).Info("created subresource")
+				_requiredNamespaceLog.V(3).Info("created subresource", "toDeploySubResource", toDeploySubResource)
 			}
-
-			// update the state of the created/updated resource in the status
-			simpleReplicator.Status.DeployedItems[toDeploySubResource.GetUID()] = status.ObjectReferenceFromObject(toDeploySubResource)
 
 			// remove the items from the hashmaps
 			delete(requiredNamespacesHashMap, requiredNSKey)
+			_resourceLog.V(3).Info("removed item from requiredNamespacesHashMap",
+				"deleteRequest", map[string]any{
+					"key":          requiredNSKey,
+					"currentState": requiredNamespacesHashMap,
+				},
+			)
 			delete(existingSubresourcesHashMap, possibleResource.String())
+			_resourceLog.V(3).Info("removed item from existingSubresourcesHashMap",
+				"deleteRequest", map[string]any{
+					"key":          possibleResource.String(),
+					"currentState": existingSubresourcesHashMap,
+				},
+			)
+
+			// update the state of the created/updated resource in the status
+			simpleReplicator.Status.DeployedItems[toDeploySubResource.GetUID()] = status.ObjectReferenceFromObject(toDeploySubResource)
+			_resourceLog.V(3).Info("added objectRef to .status.deployedItems",
+				"deployedItems", map[string]any{
+					"key":          toDeploySubResource.GetUID(),
+					"currentState": simpleReplicator.Status.DeployedItems,
+				},
+			)
 		}
 
-		_resourceLog.V(5).Info("following items are left in the important hashmaps",
+		_resourceLog.V(3).Info("following items are left in the important hashmaps",
 			"requiredNamespacesHashMap", requiredNamespacesHashMap,
 			"existingSubresourcesHashMap", existingSubresourcesHashMap,
 		)
@@ -299,7 +316,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					"object": toDeleteObject,
 				},
 			)
-			_toDeleteObjectLog.V(5).Info("removing object from cluster")
+			_toDeleteObjectLog.V(3).Info("removing object from cluster")
 
 			// this check can probably be skipped, since the existingSubresourcesHashMap already should only contain
 			// items that are registered as a subresource of the simplereplicator object. The only problem is, that
@@ -366,7 +383,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			_deployedItemsLog.Error(err, "fetching statusDeployedResource failed")
 			return ctrl.Result{}, err
 		}
-		_deployedItemsLog.V(5).Info("received statusDeployedObject from cluster",
+		_deployedItemsLog.V(3).Info("received statusDeployedObject from cluster",
 			"deployedItemObject", deployedItemObject)
 
 		// if the object does exist, check if the owner is in fact the simplereplicator resource
