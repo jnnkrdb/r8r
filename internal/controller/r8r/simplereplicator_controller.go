@@ -170,7 +170,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// now parse through all objects within the status filed, to determine, whether there are objects in the cluster
 	// which shouldn't exist from the specifications of the current state of the simplereplicator object
-	for sh256Hash, or := range simpleReplicator.Status.DeployedItems {
+	for deployedItemKey, or := range simpleReplicator.Status.DeployedItems {
 
 		// get the client.Object interface from the stored object reference
 		var deployedItemObject = or.GetObject()
@@ -182,11 +182,11 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					"group-version-kind": deployedItemObject.GetObjectKind().GroupVersionKind().String(),
 					"namespace":          deployedItemObject.GetNamespace(),
 					"name":               deployedItemObject.GetName(),
-					"sh256Hash":          sh256Hash,
+					"deployedItemKey":    deployedItemKey,
 				},
 			},
 		)
-		_deployedItemsLog.Info("checking resource from status.deployedItems")
+		_deployedItemsLog.V(3).Info("checking resource from status.deployedItems")
 
 		// trying to fetch the object from the cluster
 		if err := reconciler.Get(ctx, types.NamespacedName{
@@ -234,9 +234,10 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		// if we came this far, the object probably should be removed from the cluster
 		if err := reconciler.Delete(ctx, deployedItemObject); err != nil {
+			_deployedItemsLog.Error(err, "failed removing objectRef from cluster")
 			return ctrl.Result{}, err
 		}
-		delete(simpleReplicator.Status.DeployedItems, sh256Hash)
+		delete(simpleReplicator.Status.DeployedItems, deployedItemKey)
 	}
 
 	// creating a sub function to utilize defer funcs and return options
