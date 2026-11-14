@@ -26,6 +26,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -40,10 +41,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/v1alpha1"
-	"github.com/jnnkrdb/r8r/pkg/conditions"
-	"github.com/jnnkrdb/r8r/pkg/reconciliation/checks"
+	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/cluster/v1alpha1"
+	"github.com/jnnkrdb/r8r/pkg/status"
 )
 
 // ClusterObjectReconciler reconciles a ClusterObject object
@@ -61,7 +62,7 @@ func (r *ClusterObjectReconciler) GetRecorder() events.EventRecorder { return r.
 func (r *ClusterObjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&clusterv1alpha1.ClusterObject{}).
-		Named("clusterobject").
+		Named("cluster-clusterobject").
 		WithEventFilter(
 			predicate.Or(
 				predicate.GenerationChangedPredicate{},
@@ -109,10 +110,6 @@ func (r *ClusterObjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the ClusterObject object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.24.1/pkg/reconcile
@@ -128,44 +125,55 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	_log.V(5).Info("clusterobject content", "*clusterObject", *clusterObject)
+	var statushandler = status.NewStatusHandler(
+		ctx,
+		r,
+		clusterObject,
+		&clusterObject.Status.DefaultStatusFields,
+	)
+
+	_log.V(3).Info("clusterobject content", "*clusterObject", *clusterObject)
 
 	// request a list of namespaces, to parse through the list and
 	// then check every namespace with the give item
 	var namespaces = &corev1.NamespaceList{}
 	if err := r.GetClient().List(ctx, namespaces, &client.ListOptions{}); err != nil {
-
-		return ctrl.Result{}, conditions.OnError(
-			r,
-			ctx,
-			clusterObject,
+		return ctrl.Result{}, statushandler.ThrowEventWithConditionOnError(
 			err,
+			nil,
+			"Warning",
 			"NamespaceGathering",
-			"error fetching list of namespaces from cluster")
+			"Error Gathering Namespaces",
+			"error fetching list of namespaces from cluster: %v", err,
+		)
 	}
 
 	// request a list of namespaces, which are required to inherit the defined object
 	labelselector, err := metav1.LabelSelectorAsSelector(clusterObject.Replicator.LabelSelector)
 	if err != nil {
-		return ctrl.Result{}, conditions.OnError(
-			r,
-			ctx,
-			clusterObject,
+		return ctrl.Result{}, statushandler.ThrowEventWithConditionOnError(
 			err,
+			nil,
+			"Warning",
 			"LabelSelectorFetching",
-			"error fetching labelselector from clusterobject")
+			"Error Fetching LabelSelector",
+			"error fetching label selector from clusterobject: %v", err,
+		)
 	}
+
 	var requiredNamespaces = &corev1.NamespaceList{}
 	if err := r.GetClient().List(ctx, requiredNamespaces, &client.ListOptions{LabelSelector: labelselector}); err != nil {
-		return ctrl.Result{}, conditions.OnError(
-			r,
-			ctx,
-			clusterObject,
+		return ctrl.Result{}, statushandler.ThrowEventWithConditionOnError(
 			err,
+			nil,
+			"Warning",
 			"NamespaceGathering",
-			"error fetching list of namespaces from cluster")
+			"Error Gathering Namespaces",
+			"error fetching list of namespaces from cluster: %v", err,
+		)
 	}
-	_log.V(3).Info("calculated required namespaces", "requiredNamespaces", *requiredNamespaces)
+
+	_log.V(1).Info("calculated required namespaces", "requiredNamespaces", *requiredNamespaces)
 
 	// parse through all namespaces and check each for the defined object
 	for _, namespace := range namespaces.Items {
@@ -176,6 +184,7 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				"namespace.GetName()", namespace.GetName(),
 			)),
 			clusterObject,
+			statushandler,
 			namespace,
 			requiredNamespaces); err != nil {
 
@@ -185,29 +194,22 @@ func (r *ClusterObjectReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	_log.Info("reconciled")
 
-	r.GetRecorder().Eventf(
-		clusterObject,
-		clusterObject,
+	statushandler.ThrowEvent(
+		nil,
 		"Normal",
-		"ReconcileObject",
-		"Reconciled Object",
-		"successfully cloned resource in required namespaces")
+		"ReplicateResource",
+		"Replicated Resource",
+		"successfully created resource-replicas in required namespaces")
 
-	return ctrl.Result{},
-		conditions.Set(r,
-			ctx,
-			clusterObject,
-			conditions.Condition_Ready,
-			metav1.ConditionTrue,
-			"DeployedResource",
-			"successfully deployed resource [%s/%s:%s]",
-			clusterObject.Replicator.Resource.GetAPIVersion(),
-			clusterObject.Replicator.Resource.GetKind(),
-			clusterObject.Replicator.Resource.GetName())
+	return ctrl.Result{}, statushandler.SetCondition(metav1.Condition{
+		Type:    "Complete",
+		Status:  metav1.ConditionTrue,
+		Reason:  "ReplicatedResource",
+		Message: "successfully replicated resource among required namespaces",
+	})
 }
 
 // ------------------------------------------------------ status functions
-
 /*
 this function checks the requested resource, wether it should exist in a namespace, or not.
 
@@ -220,56 +222,58 @@ following cases should be considered:
 func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 	ctx context.Context,
 	clusterObject *clusterv1alpha1.ClusterObject,
+	statushandler *status.StatusHandler,
 	namespace corev1.Namespace,
 	requiredNamespaces *corev1.NamespaceList) error {
 
 	var _log = logf.FromContext(ctx)
 
-	_log.V(3).Info("check object")
+	_log.V(1).Info("check object")
 
 	// create copy of resources object
 	var typedObject = clusterObject.Replicator.Resource.DeepCopy()
 
-	_log.V(5).Info("object from resources cached",
+	_log.V(3).Info("object from resources cached",
 		"*typedObject", *typedObject,
 		"clusterObject.Replicator.Resource", clusterObject.Replicator.Resource)
 
 	// check, if the object does exist in the namespace and copy its content to cache
-	doesExist, err := checks.VerifyObjectExistence(
-		ctx, r.GetClient(), namespace.GetName(), typedObject.GetName(), typedObject)
+	doesExist, err := r.verifyObjectExistence(ctx, namespace.GetName(), typedObject.GetName(), typedObject)
 
 	if err != nil {
-		return conditions.OnError(
-			r,
-			ctx,
-			clusterObject,
+		return statushandler.ThrowEventWithConditionOnError(
 			err,
+			nil,
+			"Warning",
 			"ClusterObjectFetching",
-			"error receiving the object from the cluster")
+			"Error Fetching ClusterObject",
+			"error fetching cluster object from cluster: %v", err,
+		)
 	}
 
 	// check, if the object should exist in the namespace
-	shouldExist, err := checks.ShouldObjectExist(namespace, requiredNamespaces)
+	shouldExist, err := r.shouldObjectExist(namespace, requiredNamespaces)
 	if err != nil {
-		return conditions.OnError(
-			r,
-			ctx,
-			clusterObject,
+		return statushandler.ThrowEventWithConditionOnError(
 			err,
+			nil,
+			"Warning",
 			"ClusterObjectFetching",
-			"error checking if the object should exist in the namespace")
+			"Error Fetching ClusterObject",
+			"error checking if the object should exist in the namespace: %v", err,
+		)
 	}
 
-	_log.V(3).Info("state calculated", "shouldExist", shouldExist, "doesExist", doesExist)
+	_log.V(1).Info("state calculated", "shouldExist", shouldExist, "doesExist", doesExist)
 
 	// after calculating the current state, handle the 4 cases
 	if !shouldExist && !doesExist { // --------------------------------------------------------- case 1 -> ignore
-		_log.V(3).Info("ignoring")
+		_log.V(1).Info("ignoring")
 		return nil
 	}
 
 	if shouldExist && !doesExist { // --------------------------------------------------------- case 2 -> create
-		_log.V(3).Info("creating")
+		_log.V(1).Info("creating")
 
 		// create the new object, as a blueprint, to create it in the cluster
 		typedObject := clusterObject.Replicator.Resource.DeepCopy()
@@ -280,25 +284,38 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 		// set the owners reference
 		// this is required for watching the dependent objects
 		if err := controllerutil.SetControllerReference(clusterObject, typedObject, r.Scheme); err != nil {
-			return conditions.OnError(
-				r, ctx, clusterObject, err, "OwnerReferenceConfiguration", "unable to set owners reference")
+			return statushandler.ThrowEventWithConditionOnError(
+				err,
+				nil,
+				"Warning",
+				"OwnerReferenceConfiguration",
+				"Error Setting Owner Reference",
+				"error setting owner reference: %v", err,
+			)
 		}
 
 		// create the object in the cluster
 		if err := r.GetClient().Create(ctx, typedObject, &client.CreateOptions{}); err != nil {
-			return conditions.OnError(r, ctx, clusterObject, err, "ObjectCreation", "error creating object in namespace")
+			return statushandler.ThrowEventWithConditionOnError(
+				err,
+				nil,
+				"Warning",
+				"ObjectCreation",
+				"Error Creating Object",
+				"error creating object in namespace: %v", err,
+			)
 		}
 	}
 
 	// if the object does exist, and either should be updated or deleted,
 	// check if the owner is in fact the clusterobject
 	if !metav1.IsControlledBy(typedObject, clusterObject) {
-		_log.V(3).Info("object does not contain ownerreference")
+		_log.V(1).Info("object does not contain ownerreference")
 		return nil
 	}
 
 	if shouldExist && doesExist { // --------------------------------------------------------- case 3 -> update
-		_log.V(3).Info("updating")
+		_log.V(1).Info("updating")
 		// update the values of the tempObject
 		typedObject = clusterObject.Replicator.Resource.DeepCopy()
 		typedObject.SetNamespace(namespace.Name)
@@ -306,23 +323,88 @@ func (r *ClusterObjectReconciler) reconcileObjectForNamespace(
 		// set the owners reference again
 		// this is required for watching the dependent objects
 		if err := controllerutil.SetControllerReference(clusterObject, typedObject, r.Scheme); err != nil {
-			return conditions.OnError(
-				r, ctx, clusterObject, err, "OwnerReferenceConfiguration", "unable to set owners reference")
+			return statushandler.ThrowEventWithConditionOnError(
+				err,
+				nil,
+				"Warning",
+				"OwnerReferenceConfiguration",
+				"Error Setting Owner Reference",
+				"error setting owner reference: %v", err,
+			)
 		}
 
 		// update the object
 		if err := r.GetClient().Update(ctx, typedObject, &client.UpdateOptions{}); err != nil {
-			return conditions.OnError(r, ctx, clusterObject, err, "ObjectUpdate", "error updating object")
+			return statushandler.ThrowEventWithConditionOnError(
+				err,
+				nil,
+				"Warning",
+				"ObjectUpdate",
+				"Error Updating Object",
+				"error updating object in namespace: %v", err,
+			)
 		}
 	}
 
 	if !shouldExist && doesExist { // --------------------------------------------------------- case 4 -> delete
-		_log.V(3).Info("deleting")
+		_log.V(1).Info("deleting")
 		// delete the object
 		if err := r.GetClient().Delete(ctx, typedObject, &client.DeleteOptions{}); client.IgnoreNotFound(err) != nil {
-			return conditions.OnError(r, ctx, clusterObject, err, "ObjectDeletion", "error deleting object")
+			return statushandler.ThrowEventWithConditionOnError(
+				err,
+				nil,
+				"Warning",
+				"ObjectDeletion",
+				"Error Deleting Object",
+				"error deleting object in namespace: %v", err,
+			)
 		}
 	}
 
 	return nil
+}
+
+// helpers
+
+func (r *ClusterObjectReconciler) shouldObjectExist(
+	namespace corev1.Namespace,
+	requiredNamespaces *corev1.NamespaceList) (bool, error) {
+
+	if requiredNamespaces == nil {
+		return false, fmt.Errorf("requiredNamespaces cannot be nil")
+	}
+
+	for _, checkingNamespace := range requiredNamespaces.Items {
+
+		if checkingNamespace.GetName() == namespace.GetName() {
+
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// this function is used to check whether a specific object exists in the cluster or not.
+// It is used to verify the existence of the object before performing any operations on it.
+func (r *ClusterObjectReconciler) verifyObjectExistence(
+	ctx context.Context,
+	namespace, name string,
+	object *unstructured.Unstructured) (bool, error) {
+
+	// fail early, when the requested scheme is empty
+	if object == nil {
+		return false, fmt.Errorf("object scheme cannot be empty")
+	}
+
+	// request the object from the cluster
+	if err := r.GetClient().Get(ctx, client.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}, object); err != nil {
+
+		return false, client.IgnoreNotFound(err)
+	}
+
+	return true, nil
 }

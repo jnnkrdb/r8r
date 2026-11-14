@@ -22,28 +22,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package controller
+package r8r
 
 import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/v1alpha1"
-	"github.com/jnnkrdb/r8r/test/utils/fakerecorder"
+	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
 )
 
-var _ = Describe("ClusterObject Controller", func() {
+var _ = Describe("SimpleReplicator Controller", func() {
 	Context("When reconciling a resource", func() {
 		const (
 			resourceName      = "test-resource"
@@ -56,72 +51,44 @@ var _ = Describe("ClusterObject Controller", func() {
 			Name:      resourceName,
 			Namespace: resourceNamespace,
 		}
-		clusterobject := &clusterv1alpha1.ClusterObject{}
-
-		// transform the resource to unstructured.Unstructured
-		m, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-configmap",
-				Namespace: resourceNamespace,
-			},
-			Data: map[string]string{
-				"key": "value",
-			},
-		})
-		if err != nil {
-			Fail("Failed to convert resource to unstructured: " + err.Error())
-		}
-		unstructuredResource := &unstructured.Unstructured{Object: m}
-		unstructuredResource.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   "",
-			Version: "v1",
-			Kind:    "ConfigMap"})
+		simplereplicator := &r8rv1beta1.SimpleReplicator{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind ClusterObject")
-			err := k8sClient.Get(ctx, typeNamespacedName, clusterobject)
+			By("creating the custom resource for the Kind SimpleReplicator")
+			err := k8sClient.Get(ctx, typeNamespacedName, simplereplicator)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &clusterv1alpha1.ClusterObject{
+				resource := &r8rv1beta1.SimpleReplicator{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: resourceNamespace,
 					},
-					Replicator: clusterv1alpha1.ClusterObjectReplicator{
-						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{
-								"app": "test-app",
-							},
-						},
-						Resource: *unstructuredResource,
-					},
+					// TO-DO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &clusterv1alpha1.ClusterObject{}
+			// TO-DO(user): Cleanup logic after each test, like removing the resource instance.
+			resource := &r8rv1beta1.SimpleReplicator{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance ClusterObject")
+			By("Cleanup the specific resource instance SimpleReplicator")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
-
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &ClusterObjectReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Recorder: fakerecorder.NewFakeEventRecorder(),
+			controllerReconciler := &SimpleReplicatorReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
+			// TO-DO(user): Add more specific assertions depending on your controller's reconciliation logic.
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
 	})

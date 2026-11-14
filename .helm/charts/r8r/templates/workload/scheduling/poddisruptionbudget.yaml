@@ -1,0 +1,41 @@
+{{- $v := .Values -}}
+{{- $global := $v.global -}}
+{{- $main := $v -}}
+{{- $pdb := $main.pdb -}}
+{{- $wl := $main.workload -}}
+
+{{- if not (eq (include "common.workloadKind" ( dict "kind" $wl.kind )) "DaemonSet") -}}
+{{- if $pdb.enabled -}}
+--- # --------------------------------------------------------------------------------- PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "common.fullname" . }}
+  labels:
+    {{- include "common.defaultLabels" . | nindent 4 }}
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.labels 
+                          $main.labels 
+                          $pdb.labels) ) | nindent 4 }}
+  annotations:
+    {{- include "common.keyValues" ( 
+        dict "kvs" ( list $global.annotations 
+                          $main.annotations 
+                          $pdb.annotations) ) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "common.defaultSelectorLabels" . | nindent 6 }}
+  {{- with $pdb.minAvailable }}
+  minAvailable: {{ . }}
+  {{- end }}
+  {{- if not $pdb.minAvailable }}
+  {{- with $pdb.maxUnavailable }}
+  maxUnavailable: {{ . }}
+  {{- end }}
+  {{- end }}
+  {{- with $pdb.unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ . }}
+  {{- end }}
+{{- end -}}
+{{- end -}}
