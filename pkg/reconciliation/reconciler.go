@@ -142,11 +142,11 @@ func (rh *ReconciliationHandler) DoesObjectExist(ctx context.Context, obj client
 // get ownership labels
 func (rh *ReconciliationHandler) GetOwnerLabels(labels map[string]string) map[string]string {
 	labels = generics.MapFromNil(labels)
-	labels["r8r.jnnkrdb.de/ownedBy"] = fmt.Sprintf("%x", sha256.Sum256([]byte(
-		fmt.Sprintf("%s;%s",
-			rh.controllingObject.GetObjectKind().GroupVersionKind().String(),
-			rh.controllingObject.GetName(),
-		))))
+	var key = fmt.Sprintf("r8r.jnnkrdb.de/%s/%s/ownedBy",
+		rh.controllingObject.GetObjectKind().GroupVersionKind().Kind,
+		rh.controllingObject.GetObjectKind().GroupVersionKind().Version,
+	)
+	labels[key] = fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s", rh.controllingObject.GetName()))))
 	return labels
 }
 
