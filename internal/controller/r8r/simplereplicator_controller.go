@@ -26,6 +26,7 @@ package r8r
 
 import (
 	"context"
+	"fmt"
 	"maps"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -154,7 +155,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// create the reconciliation handler
 	var reconciler = reconciliation.NewReconciliationHandler(r, simpleReplicator)
-	_baseLog.V(3).Info("initialized reconciler", "reconciler", reconciler)
 
 	// request a list of namespaces, which are required to inherit the defined object
 	requiredNamespacesHashMap_primary, err := reconciler.ListAsHashMapWithLabelSelector(
@@ -270,7 +270,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				MatchLabels: reconciler.GetOwnerLabels(_r.GetLabels()),
 			})
 		if err != nil {
-			_resourceLog.Error(err, "creating existingSubresourcesHashMap")
+			_resourceLog.Error(err, "creating existingSubresourcesHashMap failed")
 			return ctrl.Result{}, err
 		}
 		_resourceLog.V(3).Info("existingSubresourcesHashMap content",
@@ -318,30 +318,73 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			_requiredNamespaceLog.V(3).Info("created subresource in cache", "toDeploySubResource", toDeploySubResource)
 
-			objectInCluster, alreadyExists := existingSubresourcesHashMap[possibleResource.String()]
-			_requiredNamespaceLog.V(3).Info("creating/updating subresource",
-				"alreadyExists", alreadyExists,
-				"objectInCluster", objectInCluster,
+			objectInCluster, relatedObjectAlreadyExists := existingSubresourcesHashMap[possibleResource.String()]
+			var unrelatedObjectAlreadyExists bool = false
+			// check whether there already is an object, with the same groupversionkind and name in that namespace
+			if err := reconciler.Get(ctx, possibleResource, toDeploySubResource); err != nil {
+				if client.IgnoreNotFound(err) != nil {
+					_resourceLog.Error(err, "failed to fetch object from cluster", "toDeploySubResource", toDeploySubResource)
+					return ctrl.Result{}, err
+				} else {
+					unrelatedObjectAlreadyExists = true
+				}
+			}
+			_requiredNamespaceLog.V(3).Info("decision on create/update/ignore for given object",
+				"decisionDriver", map[string]any{
+					"related": map[string]any{
+						"exists": relatedObjectAlreadyExists,
+						"object": objectInCluster,
+					},
+					"unrelated": map[string]any{
+						"exists": unrelatedObjectAlreadyExists,
+						"object": toDeploySubResource,
+					},
+				},
 			)
 
-			// handle either the update or creation of the toDeploySubresource
-			if alreadyExists {
+			_update := func(destination client.Object) error {
 				// set resource version (required for non-builtin types)
-				toDeploySubResource.SetResourceVersion(objectInCluster.GetResourceVersion())
+				toDeploySubResource.SetResourceVersion(destination.GetResourceVersion())
 
 				// update
 				if err := reconciler.Update(ctx, toDeploySubResource); err != nil {
 					_requiredNamespaceLog.Error(err, "updating subresource in cluster failed")
-					return ctrl.Result{}, err
+					return err
 				}
 				_requiredNamespaceLog.V(3).Info("updated subresource")
-			} else {
-				// create
+				return nil
+			}
+
+			switch {
+			case relatedObjectAlreadyExists && !unrelatedObjectAlreadyExists:
+				// given object already exists and is related to the simplereplicator resource -> simple update
+				if err := _update(objectInCluster); err != nil {
+					return ctrl.Result{}, err
+				}
+				break
+			case !relatedObjectAlreadyExists && unrelatedObjectAlreadyExists:
+				// given object already exists but is unrelated to the simplereplicator resource
+				// -> check whether we should set ownership and update or ignore object
+				if *simpleReplicator.Spec.OverwriteExisting {
+					if err := _update(toDeploySubResource); err != nil {
+						return ctrl.Result{}, err
+					}
+				}
+				break
+			case !relatedObjectAlreadyExists && !unrelatedObjectAlreadyExists:
+				// create the given object, since there is no object with the given metadata specs
 				if err := reconciler.Create(ctx, toDeploySubResource); err != nil {
 					_requiredNamespaceLog.Error(err, "creating subresource in cluster failed")
 					return ctrl.Result{}, err
 				}
 				_requiredNamespaceLog.V(3).Info("created subresource", "toDeploySubResource", toDeploySubResource)
+				break
+			default:
+				// case relatedObjectAlreadyExists && unrelatedObjectAlreadyExists:
+				var e error = fmt.Errorf("possible coexistence found: relatedObjectAlreadyExists = %t, unrelatedObjectAlreadyExists = %t",
+					relatedObjectAlreadyExists, unrelatedObjectAlreadyExists)
+				_resourceLog.Error(e, "related and unrelated objects cannot coexist, there must be an issue with the relation checks")
+				return ctrl.Result{}, e
 			}
 
 			// remove the items from the hashmaps
