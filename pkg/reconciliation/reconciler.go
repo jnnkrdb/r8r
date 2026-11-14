@@ -2,9 +2,7 @@ package reconciliation
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
-	"strings"
 
 	"github.com/jnnkrdb/r8r/pkg/generics"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -141,25 +139,20 @@ func (rh *ReconciliationHandler) DoesObjectExist(ctx context.Context, obj client
 }
 
 // get ownership labels
-func (rh *ReconciliationHandler) GetOwnerLabels(labels map[string]string) map[string]string {
+func (rh ReconciliationHandler) GetOwnerLabels(labels map[string]string) map[string]string {
 	labels = generics.MapFromNil(labels)
-
-	var key = fmt.Sprintf("%s.%s.r8r.jnnkrdb.de/ownedBy",
-		rh.controllingObject.GetObjectKind().GroupVersionKind().Version,
-		strings.ToLower(rh.controllingObject.GetObjectKind().GroupVersionKind().Kind),
-	)
-	labels[key] = fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s", rh.controllingObject.GetName()))))
+	labels["r8r.jnnkrdb.de/ownedBy"] = generics.CreateIdentifierHashFromObject(rh.controllingObject)
 	return labels
 }
 
 // set ownership for given object
-func (rh *ReconciliationHandler) SetOwnership(o client.Object) error {
+func (rh ReconciliationHandler) SetOwnership(o client.Object) error {
 	o.SetLabels(rh.GetOwnerLabels(o.GetLabels()))
 	return controllerutil.SetControllerReference(rh.controllingObject, o, rh.reconciler.GetScheme())
 }
 
 // take owner ship from an object
-func (rh *ReconciliationHandler) TakeOwnership(o client.Object) error {
+func (rh ReconciliationHandler) TakeOwnership(o client.Object) error {
 	o.SetOwnerReferences([]metav1.OwnerReference{})
 	return rh.SetOwnership(o)
 }
