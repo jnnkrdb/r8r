@@ -150,3 +150,9 @@ func (rh *ReconciliationHandler) SetOwnership(o client.Object) error {
 	o.SetLabels(rh.GetOwnerLabels(o.GetLabels()))
 	return controllerutil.SetControllerReference(rh.controllingObject, o, rh.reconciler.GetScheme())
 }
+
+// take owner ship from an object
+func (rh *ReconciliationHandler) TakeOwnership(o client.Object) error {
+	o.SetOwnerReferences([]metav1.OwnerReference{})
+	return rh.SetOwnership(o)
+}

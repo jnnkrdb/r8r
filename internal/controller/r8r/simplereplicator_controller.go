@@ -320,7 +320,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				toDeploySubResource.SetResourceVersion(destination.GetResourceVersion())
 
 				// set ownership
-				if err := reconciler.SetOwnership(toDeploySubResource); err != nil {
+				if err := reconciler.TakeOwnership(toDeploySubResource); err != nil {
 					_requiredNamespaceLog.Error(err, "failed setting ownership of sub resource")
 					return err
 				}
