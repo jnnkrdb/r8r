@@ -147,96 +147,26 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}()
 
-	// create the reconciliation handler
-	var reconciler = reconciliation.NewReconciliationHandler(r, simpleReplicator)
+	// create the reconciliation handler for the given simplereplicator
+	var sri = &SimpleReplicatorInterface{
+		SimpleReplicator: simpleReplicator,
+		Reconciler:       reconciliation.NewReconciliationHandler(r, simpleReplicator),
+	}
 
 	// request a list of namespaces, which are required to inherit the defined object
-	requiredNamespacesHashMap_primary, err := reconciler.ListAsHashMapWithLabelSelector(
+	requiredNamespaces, err := sri.Reconciler.ListAsHashMapWithLabelSelector(
 		ctx, &corev1.NamespaceList{}, generics.KeyFuncNamespaceName, simpleReplicator.Spec.Selector.LabelSelector)
 	if err != nil {
-		_baseLog.Error(err, "creating requiredNamespacesHashMap_primary")
+		_baseLog.Error(err, "creating requiredNamespaces")
 		return ctrl.Result{}, err
 	}
-	_baseLog.V(3).Info("requiredNamespacesHashMap_primary content",
-		"requiredNamespacesHashMap_primary", requiredNamespacesHashMap_primary)
+	_baseLog.V(3).Info("requiredNamespaces content", "requiredNamespaces", requiredNamespaces)
 
 	// start removel of unwanted objects from the cluster
-	_baseLog.Info("starting garbage collection from the cluster")
-
-	// now parse through all objects within the status filed, to determine, whether there are objects in the cluster
-	// which shouldn't exist from the specifications of the current state of the simplereplicator object
-	for deployedItemKey, or := range simpleReplicator.Status.DeployedItems {
-
-		// get the client.Object interface from the stored object reference
-		var deployedItemObject = or.GetObject()
-		//var shouldBeDeleted bool = false
-
-		var _deployedItemsLog = _baseLog.WithValues(
-			"deployedItem", map[string]any{
-				"metadata": map[string]any{
-					"group-version-kind": deployedItemObject.GetObjectKind().GroupVersionKind().String(),
-					"namespace":          deployedItemObject.GetNamespace(),
-					"name":               deployedItemObject.GetName(),
-					"deployedItemKey":    deployedItemKey,
-				},
-			},
-		)
-		_deployedItemsLog.V(3).Info("checking resource from status.deployedItems")
-
-		// trying to fetch the object from the cluster
-		if err := reconciler.Get(ctx, types.NamespacedName{
-			Namespace: deployedItemObject.GetNamespace(),
-			Name:      deployedItemObject.GetName(),
-		}, deployedItemObject); err != nil {
-
-			// if this is an notFound error return nil
-			// that will remove the object from the statusfield
-			if client.IgnoreNotFound(err) == nil {
-				_deployedItemsLog.Info("object not found")
-				continue
-			}
-
-			_deployedItemsLog.Error(err, "fetching statusDeployedResource failed")
-			return ctrl.Result{}, err
-		}
-		_deployedItemsLog.V(3).Info("received statusDeployedObject from cluster",
-			"deployedItemObject", deployedItemObject)
-
-		// if the object does exist, check if the owner is in fact the simplereplicator resource
-		if isControlledBy := metav1.IsControlledBy(deployedItemObject, simpleReplicator); !isControlledBy {
-			_deployedItemsLog.V(3).Info("object does not contain ownerreference -> ignoring",
-				"isControlledBy", isControlledBy)
-			// remove the item from the deployedItems pool, since it is not related
-			delete(simpleReplicator.Status.DeployedItems, deployedItemKey)
-			continue
-		}
-
-		// similar object in the .spec.resources list?
-		var objectInSpecResources bool = generics.UnstructuredListContainsObject(
-			simpleReplicator.Spec.Resources, deployedItemObject)
-		_deployedItemsLog.V(3).Info("similar item in .spec.resources list -> ignoring",
-			"objectInSpecResources", objectInSpecResources,
-		)
-		if objectInSpecResources {
-			continue
-		}
-
-		_, containsNamespace := requiredNamespacesHashMap_primary["/"+deployedItemObject.GetNamespace()]
-		if containsNamespace {
-			_deployedItemsLog.V(3).Info("object is found in correct namespace",
-				"requiredNamespacesHashMap_primary", requiredNamespacesHashMap_primary,
-				"containsNamespace", containsNamespace)
-			continue
-		}
-
-		// if we came this far, the object probably should be removed from the cluster
-		if err := reconciler.Delete(ctx, deployedItemObject); err != nil {
-			_deployedItemsLog.Error(err, "failed removing objectRef from cluster")
-			return ctrl.Result{}, err
-		}
-		delete(simpleReplicator.Status.DeployedItems, deployedItemKey)
+	if err := sri.GarbageCollection(ctx); err != nil {
+		_baseLog.Error(err, "error with garbage collection")
+		return ctrl.Result{}, err
 	}
-	_baseLog.Info("finished garbage collection from the cluster")
 
 	// creating a sub function to utilize defer funcs and return options
 	subResourceReconciliation := func(_r unstructured.Unstructured) (ctrl.Result, error) {
@@ -253,15 +183,15 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// original map.
 		// with the defer function we ensure, that the reference can be collected safely
 		// from the garbage collector and will not be used after the function drops
-		var requiredNamespacesHashMap = maps.Clone(requiredNamespacesHashMap_primary)
+		var requiredNamespacesHashMap = maps.Clone(requiredNamespaces)
 		defer func() {
 			requiredNamespacesHashMap = nil
 		}()
 
 		// get resources, that are directly linked to the simplereplicator, due to set labels
-		existingSubresourcesHashMap, err := reconciler.ListAsHashMapWithLabelSelector(
+		existingSubresourcesHashMap, err := sri.Reconciler.ListAsHashMapWithLabelSelector(
 			ctx, generics.UnstructuredListFromObject(_r), generics.KeyFuncNamespaceName, &metav1.LabelSelector{
-				MatchLabels: reconciler.GetOwnerLabels(_r.GetLabels()),
+				MatchLabels: sri.Reconciler.GetOwnerLabels(_r.GetLabels()),
 			})
 		if err != nil {
 			_resourceLog.Error(err, "creating existingSubresourcesHashMap failed")
@@ -271,10 +201,10 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"existingSubresourcesHashMap", existingSubresourcesHashMap)
 
 		// parse through the required namespaces hashmap (the original), to handle create and update requests
-		for requiredNSKey := range requiredNamespacesHashMap_primary {
+		for requiredNSKey := range requiredNamespaces {
 
 			var possibleResource = types.NamespacedName{
-				Namespace: requiredNamespacesHashMap_primary[requiredNSKey].GetName(),
+				Namespace: requiredNamespaces[requiredNSKey].GetName(),
 				Name:      _r.GetName(),
 			}
 
@@ -295,7 +225,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			var unrelatedObjectAlreadyExists bool = false
 			if !relatedObjectAlreadyExists {
 				// check whether there already is an object, with the same groupversionkind and name in that namespace
-				unrelatedObjectAlreadyExists, err = reconciler.DoesObjectExist(ctx, toDeploySubResource)
+				unrelatedObjectAlreadyExists, err = sri.Reconciler.DoesObjectExist(ctx, toDeploySubResource)
 				if err != nil {
 					_requiredNamespaceLog.Error(err, "failed to fetch object from cluster", "toDeploySubResource", toDeploySubResource)
 					return ctrl.Result{}, err
@@ -322,13 +252,13 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				toDeploySubResource.SetResourceVersion(destination.GetResourceVersion())
 
 				// set ownership
-				if err := reconciler.TakeOwnership(toDeploySubResource); err != nil {
+				if err := sri.Reconciler.TakeOwnership(toDeploySubResource); err != nil {
 					_requiredNamespaceLog.Error(err, "failed setting ownership of sub resource")
 					return err
 				}
 
 				// update
-				if err := reconciler.Update(ctx, toDeploySubResource); err != nil {
+				if err := sri.Reconciler.Update(ctx, toDeploySubResource); err != nil {
 					_requiredNamespaceLog.Error(err, "updating subresource in cluster failed")
 					return err
 				}
@@ -349,7 +279,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				_requiredNamespaceLog.V(3).Info("overwrite existing resource?",
 					"overwrite", *simpleReplicator.Spec.OverwriteExisting)
 				if !*simpleReplicator.Spec.OverwriteExisting {
-					// this leaves the currently checked item from requiredNamespacesHashMap_primary, for the given object
+					// this leaves the currently checked item from requiredNamespaces, for the given object
 					// because we can completly ignore it now
 					continue
 				}
@@ -361,12 +291,12 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				break
 			case !relatedObjectAlreadyExists && !unrelatedObjectAlreadyExists:
 				// set ownership
-				if err := reconciler.SetOwnership(toDeploySubResource); err != nil {
+				if err := sri.Reconciler.SetOwnership(toDeploySubResource); err != nil {
 					_requiredNamespaceLog.Error(err, "failed setting ownership of sub resource")
 					return ctrl.Result{}, err
 				}
 				// create the given object, since there is no object with the given metadata specs
-				if err := reconciler.Create(ctx, toDeploySubResource); err != nil {
+				if err := sri.Reconciler.Create(ctx, toDeploySubResource); err != nil {
 					_requiredNamespaceLog.Error(err, "creating subresource in cluster failed")
 					return ctrl.Result{}, err
 				}
@@ -383,17 +313,11 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// remove the items from the hashmaps
 			delete(requiredNamespacesHashMap, requiredNSKey)
 			_resourceLog.V(3).Info("removed item from requiredNamespacesHashMap",
-				"deleteRequest", map[string]any{
-					"key":          requiredNSKey,
-					"currentState": requiredNamespacesHashMap,
-				},
+				"deleteRequest", map[string]any{"key": requiredNSKey, "currentState": requiredNamespacesHashMap},
 			)
 			delete(existingSubresourcesHashMap, possibleResource.String())
 			_resourceLog.V(3).Info("removed item from existingSubresourcesHashMap",
-				"deleteRequest", map[string]any{
-					"key":          possibleResource.String(),
-					"currentState": existingSubresourcesHashMap,
-				},
+				"deleteRequest", map[string]any{"key": possibleResource.String(), "currentState": existingSubresourcesHashMap},
 			)
 
 			// update the state of the created/updated resource in the status

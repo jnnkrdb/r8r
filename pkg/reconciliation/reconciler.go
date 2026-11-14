@@ -29,6 +29,11 @@ type ReconciliationHandler struct {
 	controllingObject client.Object
 }
 
+// get the current client of the reconciliation handler
+func (rh *ReconciliationHandler) Client() client.Client {
+	return rh.reconciler.GetClient()
+}
+
 // create a new handler instance from a given reconciler
 func NewReconciliationHandler(rd Reconciler, pObj client.Object) *ReconciliationHandler {
 	return &ReconciliationHandler{

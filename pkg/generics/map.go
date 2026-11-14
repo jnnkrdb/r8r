@@ -17,16 +17,6 @@ func MapFromNil[M ~map[K]V, K comparable, V any](m M) M {
 	return m
 }
 
-// create hashmap from unstructured.UnstructuredList, uses a function to determine the key
-//func UnstructuredListToHashmap(list *unstructured.UnstructuredList, fnKey func(unstructured.Unstructured) string) map[string]client.Object {
-//	// create the map from with the items list
-//	out := make(map[string]client.Object, len(list.Items))
-//	for _, item := range list.Items {
-//		out[fnKey(item)] = &item
-//	}
-//	return out
-//}
-
 // defines the function, which calculates the key for the created hashmap item.
 // comes in handy, if you need different keys from an item as the hashmaps item key
 type KeyFunc func(client.Object) string
