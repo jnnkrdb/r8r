@@ -108,10 +108,6 @@ func (r *SimpleReplicatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the SimpleReplicator object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.24.1/pkg/reconcile
@@ -146,7 +142,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// this is required, since there may be the chance its the first time the simplereplicator object
 	// gets reconciled
 	if simpleReplicator.Status.DeployedItems == nil {
-		simpleReplicator.Status.DeployedItems = make(map[types.UID]status.ObjectReference)
+		simpleReplicator.Status.DeployedItems = make(map[string]status.ObjectReference)
 	}
 
 	// create a defer function to update the status fields, even when one resource fails to be reconciled
@@ -174,7 +170,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// now parse through all objects within the status filed, to determine, whether there are objects in the cluster
 	// which shouldn't exist from the specifications of the current state of the simplereplicator object
-	for uid, or := range simpleReplicator.Status.DeployedItems {
+	for sh256Hash, or := range simpleReplicator.Status.DeployedItems {
 
 		// get the client.Object interface from the stored object reference
 		var deployedItemObject = or.GetObject()
@@ -186,7 +182,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					"group-version-kind": deployedItemObject.GetObjectKind().GroupVersionKind().String(),
 					"namespace":          deployedItemObject.GetNamespace(),
 					"name":               deployedItemObject.GetName(),
-					"uid":                uid,
+					"sh256Hash":          sh256Hash,
 				},
 			},
 		)
@@ -240,7 +236,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if err := reconciler.Delete(ctx, deployedItemObject); err != nil {
 			return ctrl.Result{}, err
 		}
-		delete(simpleReplicator.Status.DeployedItems, uid)
+		delete(simpleReplicator.Status.DeployedItems, sh256Hash)
 	}
 
 	// creating a sub function to utilize defer funcs and return options
@@ -364,10 +360,12 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			)
 
 			// update the state of the created/updated resource in the status
-			simpleReplicator.Status.DeployedItems[toDeploySubResource.GetUID()] = status.ObjectReferenceFromObject(toDeploySubResource)
+			var objectRef = status.ObjectReferenceFromObject(toDeploySubResource)
+			simpleReplicator.Status.DeployedItems[objectRef.GetKey()] = objectRef
 			_resourceLog.V(3).Info("added objectRef to .status.deployedItems",
 				"deployedItems", map[string]any{
-					"key":          toDeploySubResource.GetUID(),
+					"key":          objectRef.GetKey(),
+					"content":      objectRef.String(),
 					"currentState": simpleReplicator.Status.DeployedItems,
 				},
 			)
@@ -379,8 +377,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		)
 
 		/*
-
-
 			// TODO: implement the deletion steps of the sub resources, which shouldn't exist anymore
 			// parse through all the items, that are left in the existingSubresourcesHashMap. those
 			// objects should be removed from the cluster
@@ -411,8 +407,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				// since the object might be inside of the statusfield, we have to remove it there as well
 				delete(simpleReplicator.Status.DeployedItems, toDeleteObject.GetUID())
 			}
-
-
 		*/
 
 		return ctrl.Result{}, nil
