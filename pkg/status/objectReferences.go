@@ -1,6 +1,9 @@
 package status
 
 import (
+	"crypto/sha256"
+	"fmt"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -31,4 +34,14 @@ func (or ObjectReference) GetObject() client.Object {
 	o.SetNamespace(or.Namespace)
 	o.SetName(or.Name)
 	return o
+}
+
+// return the string instance of the related objectreference
+func (or ObjectReference) String() string {
+	return fmt.Sprintf("%s;%s;%s;%s", or.ApiVersion, or.Kind, or.Namespace, or.Name)
+}
+
+// get an id key, that is identical to the contents of the ObjectReference instance
+func (or ObjectReference) GetKey() string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(or.String())))
 }

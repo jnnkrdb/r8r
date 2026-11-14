@@ -29,7 +29,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -47,7 +46,7 @@ type SimpleReplicatorStatus struct {
 	//Deployed *status.ObjectReferenceList
 
 	// +optional
-	DeployedItems map[types.UID]status.ObjectReference `json:"deployed,omitempty"`
+	DeployedItems map[string]status.ObjectReference `json:"deployed,omitempty"`
 }
 
 // +kubebuilder:object:root=true
