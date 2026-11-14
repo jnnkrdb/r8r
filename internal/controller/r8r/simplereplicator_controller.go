@@ -207,11 +207,11 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"deployedItemObject", deployedItemObject)
 
 		// if the object does exist, check if the owner is in fact the simplereplicator resource
-		// if isControlledBy := metav1.IsControlledBy(deployedItemObject, simpleReplicator); !isControlledBy {
-		// 	_deployedItemsLog.V(3).Info("object does not contain ownerreference -> ignoring",
-		// 		"isControlledBy", isControlledBy)
-		// 	continue
-		// }
+		if isControlledBy := metav1.IsControlledBy(deployedItemObject, simpleReplicator); !isControlledBy {
+			_deployedItemsLog.V(3).Info("object does not contain ownerreference -> ignoring",
+				"isControlledBy", isControlledBy)
+			continue
+		}
 
 		// similar object in the .spec.resources list?
 		var objectInSpecResources bool = generics.UnstructuredListContainsObject(
