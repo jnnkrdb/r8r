@@ -297,9 +297,11 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				// check whether there already is an object, with the same groupversionkind and name in that namespace
 				unrelatedObjectAlreadyExists, err = reconciler.DoesObjectExist(ctx, toDeploySubResource)
 				if err != nil {
-					_resourceLog.Error(err, "failed to fetch object from cluster", "toDeploySubResource", toDeploySubResource)
+					_requiredNamespaceLog.Error(err, "failed to fetch object from cluster", "toDeploySubResource", toDeploySubResource)
 					return ctrl.Result{}, err
 				}
+
+				unrelatedObjectAlreadyExists = !metav1.IsControlledBy(toDeploySubResource, simpleReplicator)
 			}
 
 			_requiredNamespaceLog.V(3).Info("decision on create/update/ignore for given object",
