@@ -292,7 +292,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// check, whether subresource already exists and is related
 			objectInCluster, relatedObjectAlreadyExists := existingSubresourcesHashMap[possibleResource.String()]
 
-			var unrelatedObjectAlreadyExists bool = true
+			var unrelatedObjectAlreadyExists bool = false
 			if !relatedObjectAlreadyExists {
 				// check whether there already is an object, with the same groupversionkind and name in that namespace
 				unrelatedObjectAlreadyExists, err = reconciler.DoesObjectExist(ctx, toDeploySubResource)
