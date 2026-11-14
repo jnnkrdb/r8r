@@ -319,14 +319,14 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			_requiredNamespaceLog.V(3).Info("created subresource in cache", "toDeploySubResource", toDeploySubResource)
 
 			objectInCluster, relatedObjectAlreadyExists := existingSubresourcesHashMap[possibleResource.String()]
-			var unrelatedObjectAlreadyExists bool = false
+			var unrelatedObjectAlreadyExists bool = true
 			// check whether there already is an object, with the same groupversionkind and name in that namespace
 			if err := reconciler.Get(ctx, possibleResource, toDeploySubResource); err != nil {
 				if client.IgnoreNotFound(err) != nil {
 					_resourceLog.Error(err, "failed to fetch object from cluster", "toDeploySubResource", toDeploySubResource)
 					return ctrl.Result{}, err
 				} else {
-					unrelatedObjectAlreadyExists = true
+					unrelatedObjectAlreadyExists = false
 				}
 			}
 			_requiredNamespaceLog.V(3).Info("decision on create/update/ignore for given object",
