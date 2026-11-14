@@ -402,7 +402,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			_resourceLog.V(3).Info("added objectRef to .status.deployedItems",
 				"deployedItems", map[string]any{
 					"key":          objectRef.GetKey(),
-					"content":      objectRef.String(),
+					"content":      objectRef,
 					"currentState": simpleReplicator.Status.DeployedItems,
 				},
 			)
