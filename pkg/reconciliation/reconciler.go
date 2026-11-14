@@ -6,7 +6,6 @@ import (
 
 	"github.com/jnnkrdb/r8r/pkg/generics"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
@@ -130,15 +129,12 @@ func (rh *ReconciliationHandler) Delete(ctx context.Context, obj client.Object, 
 
 // check whether an object exists or not
 func (rh *ReconciliationHandler) DoesObjectExist(ctx context.Context, obj client.Object) (bool, error) {
-
 	if err := rh.Get(ctx, types.NamespacedName{
 		Namespace: obj.GetNamespace(),
 		Name:      obj.GetName(),
 	}, obj); err != nil {
-
 		return false, client.IgnoreNotFound(err)
 	}
-
 	return true, nil
 }
 
@@ -149,25 +145,8 @@ func (rh *ReconciliationHandler) GetOwnerLabels(labels map[string]string) map[st
 	return labels
 }
 
-// creates a resource, that is owned by the controlling object
-func (rh *ReconciliationHandler) CreateSubResource(object unstructured.Unstructured, namespace string) (client.Object, error) {
-
-	// create a copy of the given object, that can be used with client.Object interface
-	var owned = object.DeepCopy()
-
-	// set the namespace
-	owned.SetNamespace(namespace)
-
-	// set the ownerlabels
-	owned.SetLabels(rh.GetOwnerLabels(object.GetLabels()))
-
-	// set the ownership via the ownerReferences
-	if err := controllerutil.SetControllerReference(
-		rh.controllingObject, owned, rh.reconciler.GetScheme(),
-	); err != nil {
-
-		return owned, err
-	}
-
-	return owned, nil
+// set ownership for given object
+func (rh *ReconciliationHandler) SetOwnership(o client.Object) error {
+	o.SetLabels(rh.GetOwnerLabels(o.GetLabels()))
+	return controllerutil.SetControllerReference(rh.controllingObject, o, rh.reconciler.GetScheme())
 }
