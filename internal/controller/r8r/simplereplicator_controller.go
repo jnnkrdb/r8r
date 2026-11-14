@@ -371,10 +371,15 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			case !relatedObjectAlreadyExists && unrelatedObjectAlreadyExists:
 				// given object already exists but is unrelated to the simplereplicator resource
 				// -> check whether we should set ownership and update or ignore object
-				if *simpleReplicator.Spec.OverwriteExisting {
-					if err := _update(toDeploySubResource); err != nil {
-						return ctrl.Result{}, err
-					}
+				if !*simpleReplicator.Spec.OverwriteExisting {
+					// this leaves the currently checked item from requiredNamespacesHashMap_primary, for the given object
+					// because we can completly ignore it now
+					continue
+				}
+
+				// updated and set ownership
+				if err := _update(toDeploySubResource); err != nil {
+					return ctrl.Result{}, err
 				}
 				break
 			case !relatedObjectAlreadyExists && !unrelatedObjectAlreadyExists:
@@ -425,40 +430,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"requiredNamespacesHashMap", requiredNamespacesHashMap,
 			"existingSubresourcesHashMap", existingSubresourcesHashMap,
 		)
-
-		/*
-			// TODO: implement the deletion steps of the sub resources, which shouldn't exist anymore
-			// parse through all the items, that are left in the existingSubresourcesHashMap. those
-			// objects should be removed from the cluster
-			for toDeleteObjectKey, toDeleteObject := range existingSubresourcesHashMap {
-
-				_toDeleteObjectLog := _resourceLog.WithValues(
-					"toDelete", map[string]any{
-						"key":    toDeleteObjectKey,
-						"object": toDeleteObject,
-					},
-				)
-				_toDeleteObjectLog.V(3).Info("removing object from cluster")
-
-				// this check can probably be skipped, since the existingSubresourcesHashMap already should only contain
-				// items that are registered as a subresource of the simplereplicator object. The only problem is, that
-				// this is defined by labels and not ownerreferences, which is why there is this check in place
-				if !metav1.IsControlledBy(toDeleteObject, simpleReplicator) {
-					_toDeleteObjectLog.V(3).Info("object does not contain ownerreference")
-					continue
-				}
-
-				// remove the actual object from the cluster
-				if err := reconciler.Delete(ctx, toDeleteObject); err != nil {
-					_toDeleteObjectLog.Error(err, "deleting subresource from cluster failed")
-					return ctrl.Result{}, err
-				}
-
-				// since the object might be inside of the statusfield, we have to remove it there as well
-				delete(simpleReplicator.Status.DeployedItems, toDeleteObject.GetUID())
-			}
-		*/
-
 		return ctrl.Result{}, nil
 	}
 
