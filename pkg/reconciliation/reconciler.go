@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"strings"
 
 	"github.com/jnnkrdb/r8r/pkg/generics"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -142,9 +143,10 @@ func (rh *ReconciliationHandler) DoesObjectExist(ctx context.Context, obj client
 // get ownership labels
 func (rh *ReconciliationHandler) GetOwnerLabels(labels map[string]string) map[string]string {
 	labels = generics.MapFromNil(labels)
-	var key = fmt.Sprintf("r8r.jnnkrdb.de/%s/%s/ownedBy",
-		rh.controllingObject.GetObjectKind().GroupVersionKind().Kind,
+
+	var key = fmt.Sprintf("%s.%s.r8r.jnnkrdb.de/ownedBy",
 		rh.controllingObject.GetObjectKind().GroupVersionKind().Version,
+		strings.ToLower(rh.controllingObject.GetObjectKind().GroupVersionKind().Kind),
 	)
 	labels[key] = fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s", rh.controllingObject.GetName()))))
 	return labels
