@@ -170,6 +170,79 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	_baseLog.V(3).Info("requiredNamespacesHashMap_primary content",
 		"requiredNamespacesHashMap_primary", requiredNamespacesHashMap_primary)
 
+	// start removel of unwanted objects from the cluster
+
+	// now parse through all objects within the status filed, to determine, whether there are objects in the cluster
+	// which shouldn't exist from the specifications of the current state of the simplereplicator object
+	for uid, or := range simpleReplicator.Status.DeployedItems {
+
+		// get the client.Object interface from the stored object reference
+		var deployedItemObject = or.GetObject()
+		//var shouldBeDeleted bool = false
+
+		var _deployedItemsLog = _baseLog.WithValues(
+			"deployedItem", map[string]any{
+				"metadata": map[string]any{
+					"group-version-kind": deployedItemObject.GetObjectKind().GroupVersionKind().String(),
+					"namespace":          deployedItemObject.GetNamespace(),
+					"name":               deployedItemObject.GetName(),
+					"uid":                uid,
+				},
+			},
+		)
+		_deployedItemsLog.Info("checking resource from status.deployedItems")
+
+		// trying to fetch the object from the cluster
+		if err := reconciler.Get(ctx, types.NamespacedName{
+			Namespace: deployedItemObject.GetNamespace(),
+			Name:      deployedItemObject.GetName(),
+		}, deployedItemObject); err != nil {
+
+			// if this is an notFound error return nil
+			// that will remove the object from the statusfield
+			if client.IgnoreNotFound(err) == nil {
+				_deployedItemsLog.Info("object not found")
+				continue
+			}
+
+			_deployedItemsLog.Error(err, "fetching statusDeployedResource failed")
+			return ctrl.Result{}, err
+		}
+		_deployedItemsLog.V(3).Info("received statusDeployedObject from cluster",
+			"deployedItemObject", deployedItemObject)
+
+		// if the object does exist, check if the owner is in fact the simplereplicator resource
+		if isControlledBy := metav1.IsControlledBy(deployedItemObject, simpleReplicator); !isControlledBy {
+			_deployedItemsLog.V(3).Info("object does not contain ownerreference -> ignoring",
+				"isControlledBy", isControlledBy)
+			continue
+		}
+
+		// similar object in the .spec.resources list?
+		var objectInSpecResources bool = generics.UnstructuredListContainsObject(
+			simpleReplicator.Spec.Resources, deployedItemObject)
+		_deployedItemsLog.V(3).Info("similar item in .spec.resources list -> ignoring",
+			"objectInSpecResources", objectInSpecResources,
+		)
+		if objectInSpecResources {
+			continue
+		}
+
+		_, containsNamespace := requiredNamespacesHashMap_primary["/"+deployedItemObject.GetNamespace()]
+		if containsNamespace {
+			_deployedItemsLog.V(3).Info("object is found in correct namespace",
+				"requiredNamespacesHashMap_primary", requiredNamespacesHashMap_primary,
+				"containsNamespace", containsNamespace)
+			continue
+		}
+
+		// if we came this far, the object probably should be removed from the cluster
+		if err := reconciler.Delete(ctx, deployedItemObject); err != nil {
+			return ctrl.Result{}, err
+		}
+		delete(simpleReplicator.Status.DeployedItems, uid)
+	}
+
 	// creating a sub function to utilize defer funcs and return options
 	subResourceReconciliation := func(_r unstructured.Unstructured) (ctrl.Result, error) {
 
@@ -305,36 +378,42 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"existingSubresourcesHashMap", existingSubresourcesHashMap,
 		)
 
-		// TODO: implement the deletion steps of the sub resources, which shouldn't exist anymore
-		// parse through all the items, that are left in the existingSubresourcesHashMap. those
-		// objects should be removed from the cluster
-		for toDeleteObjectKey, toDeleteObject := range existingSubresourcesHashMap {
+		/*
 
-			_toDeleteObjectLog := _resourceLog.WithValues(
-				"toDelete", map[string]any{
-					"key":    toDeleteObjectKey,
-					"object": toDeleteObject,
-				},
-			)
-			_toDeleteObjectLog.V(3).Info("removing object from cluster")
 
-			// this check can probably be skipped, since the existingSubresourcesHashMap already should only contain
-			// items that are registered as a subresource of the simplereplicator object. The only problem is, that
-			// this is defined by labels and not ownerreferences, which is why there is this check in place
-			if !metav1.IsControlledBy(toDeleteObject, simpleReplicator) {
-				_toDeleteObjectLog.V(3).Info("object does not contain ownerreference")
-				continue
+			// TODO: implement the deletion steps of the sub resources, which shouldn't exist anymore
+			// parse through all the items, that are left in the existingSubresourcesHashMap. those
+			// objects should be removed from the cluster
+			for toDeleteObjectKey, toDeleteObject := range existingSubresourcesHashMap {
+
+				_toDeleteObjectLog := _resourceLog.WithValues(
+					"toDelete", map[string]any{
+						"key":    toDeleteObjectKey,
+						"object": toDeleteObject,
+					},
+				)
+				_toDeleteObjectLog.V(3).Info("removing object from cluster")
+
+				// this check can probably be skipped, since the existingSubresourcesHashMap already should only contain
+				// items that are registered as a subresource of the simplereplicator object. The only problem is, that
+				// this is defined by labels and not ownerreferences, which is why there is this check in place
+				if !metav1.IsControlledBy(toDeleteObject, simpleReplicator) {
+					_toDeleteObjectLog.V(3).Info("object does not contain ownerreference")
+					continue
+				}
+
+				// remove the actual object from the cluster
+				if err := reconciler.Delete(ctx, toDeleteObject); err != nil {
+					_toDeleteObjectLog.Error(err, "deleting subresource from cluster failed")
+					return ctrl.Result{}, err
+				}
+
+				// since the object might be inside of the statusfield, we have to remove it there as well
+				delete(simpleReplicator.Status.DeployedItems, toDeleteObject.GetUID())
 			}
 
-			// remove the actual object from the cluster
-			if err := reconciler.Delete(ctx, toDeleteObject); err != nil {
-				_toDeleteObjectLog.Error(err, "deleting subresource from cluster failed")
-				return ctrl.Result{}, err
-			}
 
-			// since the object might be inside of the statusfield, we have to remove it there as well
-			delete(simpleReplicator.Status.DeployedItems, toDeleteObject.GetUID())
-		}
+		*/
 
 		return ctrl.Result{}, nil
 	}
@@ -345,80 +424,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if result, err := subResourceReconciliation(_resource); err != nil {
 			return result, err
 		}
-	}
-
-	// TODO: swap deletion of unwanted objects with creation and updating of wanted objects
-	// 			 there may be an issue regarding the maps nad their parsing
-
-	// now parse through all objects within the status filed, to determine, whether there are objects in the cluster
-	// which shouldn't exist from the specifications of the current state of the simplereplicator object
-	for uid, or := range simpleReplicator.Status.DeployedItems {
-
-		// get the client.Object interface from the stored object reference
-		var deployedItemObject = or.GetObject()
-		//var shouldBeDeleted bool = false
-
-		var _deployedItemsLog = _baseLog.WithValues(
-			"deployedItem", map[string]any{
-				"metadata": map[string]any{
-					"group-version-kind": deployedItemObject.GetObjectKind().GroupVersionKind().String(),
-					"namespace":          deployedItemObject.GetNamespace(),
-					"name":               deployedItemObject.GetName(),
-					"uid":                uid,
-				},
-			},
-		)
-		_deployedItemsLog.Info("checking resource from status.deployedItems")
-
-		// trying to fetch the object from the cluster
-		if err := reconciler.Get(ctx, types.NamespacedName{
-			Namespace: deployedItemObject.GetNamespace(),
-			Name:      deployedItemObject.GetName(),
-		}, deployedItemObject); err != nil {
-
-			// if this is an notFound error return nil
-			// that will remove the object from the statusfield
-			if client.IgnoreNotFound(err) == nil {
-				_deployedItemsLog.Info("object not found")
-				continue
-			}
-
-			_deployedItemsLog.Error(err, "fetching statusDeployedResource failed")
-			return ctrl.Result{}, err
-		}
-		_deployedItemsLog.V(3).Info("received statusDeployedObject from cluster",
-			"deployedItemObject", deployedItemObject)
-
-		// if the object does exist, check if the owner is in fact the simplereplicator resource
-		if isControlledBy := metav1.IsControlledBy(deployedItemObject, simpleReplicator); !isControlledBy {
-			_deployedItemsLog.V(3).Info("object does not contain ownerreference -> ignoring",
-				"isControlledBy", isControlledBy)
-			continue
-		}
-
-		// similar object in the .spec.resources list?
-		var objectInSpecResources bool = generics.UnstructuredListContainsObject(
-			simpleReplicator.Spec.Resources, deployedItemObject)
-		_deployedItemsLog.V(3).Info("similar item in .spec.resources list -> ignoring",
-			"objectInSpecResources", objectInSpecResources,
-		)
-		if objectInSpecResources {
-			continue
-		}
-
-		_, containsNamespace := requiredNamespacesHashMap_primary["/"+deployedItemObject.GetNamespace()]
-		if containsNamespace {
-			_deployedItemsLog.V(3).Info("object is found in correct namespace",
-				"requiredNamespacesHashMap_primary", requiredNamespacesHashMap_primary,
-				"containsNamespace", containsNamespace)
-			continue
-		}
-
-		// if we came this far, the object probably should be removed from the cluster
-		if err := reconciler.Delete(ctx, deployedItemObject); err != nil {
-			return ctrl.Result{}, err
-		}
-		delete(simpleReplicator.Status.DeployedItems, uid)
 	}
 
 	_baseLog.Info("successfully created resource-replicas in required namespaces")
