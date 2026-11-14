@@ -210,6 +210,8 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if isControlledBy := metav1.IsControlledBy(deployedItemObject, simpleReplicator); !isControlledBy {
 			_deployedItemsLog.V(3).Info("object does not contain ownerreference -> ignoring",
 				"isControlledBy", isControlledBy)
+			// remove the item from the deployedItems pool, since it is not related
+			delete(simpleReplicator.Status.DeployedItems, deployedItemKey)
 			continue
 		}
 
