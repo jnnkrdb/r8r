@@ -2,6 +2,7 @@ package reconciliation
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/jnnkrdb/r8r/pkg/generics"
@@ -141,7 +142,11 @@ func (rh *ReconciliationHandler) DoesObjectExist(ctx context.Context, obj client
 // get ownership labels
 func (rh *ReconciliationHandler) GetOwnerLabels(labels map[string]string) map[string]string {
 	labels = generics.MapFromNil(labels)
-	labels["r8r.jnnkrdb.de/ownedBy"] = string(rh.controllingObject.GetUID())
+	labels["r8r.jnnkrdb.de/ownedBy"] = fmt.Sprintf("%x", sha256.Sum256([]byte(
+		fmt.Sprintf("%s;%s",
+			rh.controllingObject.GetObjectKind().GroupVersionKind().String(),
+			rh.controllingObject.GetName(),
+		))))
 	return labels
 }
 
