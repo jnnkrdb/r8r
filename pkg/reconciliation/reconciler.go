@@ -10,7 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // this implements the reconciler interface, which enables some
@@ -141,23 +140,4 @@ func (rh *ReconciliationHandler) DoesObjectExist(ctx context.Context, obj client
 		return false, client.IgnoreNotFound(err)
 	}
 	return true, nil
-}
-
-// get ownership labels
-func (rh ReconciliationHandler) GetOwnerLabels(labels map[string]string) map[string]string {
-	labels = generics.MapFromNil(labels)
-	labels["r8r.jnnkrdb.de/ownedBy"] = generics.CreateIdentifierHashFromObject(rh.controllingObject)
-	return labels
-}
-
-// set ownership for given object
-func (rh ReconciliationHandler) SetOwnership(o client.Object) error {
-	o.SetLabels(rh.GetOwnerLabels(o.GetLabels()))
-	return controllerutil.SetControllerReference(rh.controllingObject, o, rh.reconciler.GetScheme())
-}
-
-// take owner ship from an object
-func (rh ReconciliationHandler) TakeOwnership(o client.Object) error {
-	o.SetOwnerReferences([]metav1.OwnerReference{})
-	return rh.SetOwnership(o)
 }

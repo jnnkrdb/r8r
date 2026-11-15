@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -45,7 +46,6 @@ import (
 
 	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
 	"github.com/jnnkrdb/r8r/pkg/generics"
-	"github.com/jnnkrdb/r8r/pkg/reconciliation"
 	"github.com/jnnkrdb/r8r/pkg/status"
 )
 
@@ -118,7 +118,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// create cached object of requested resource
 	var simpleReplicator = &r8rv1beta1.SimpleReplicator{}
-	if err := r.GetClient().Get(ctx, req.NamespacedName, simpleReplicator, &client.GetOptions{}); err != nil {
+	if err := r.GetClient().Get(ctx, req.NamespacedName, simpleReplicator); err != nil {
 		_baseLog.Error(err, "error fetching object from cluster")
 		return ctrl.Result{}, err
 	}
@@ -126,10 +126,15 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	_baseLog = _baseLog.WithValues(
 		"simpleReplicator", map[string]any{
 			"metadata": map[string]any{
-				"uid": simpleReplicator.GetUID(), "resourceversion": simpleReplicator.GetResourceVersion(),
+				"uid":             simpleReplicator.GetUID(),
+				"resourceversion": simpleReplicator.GetResourceVersion(),
 			},
-			"spec":   map[string]any{"resourcesCount": len(simpleReplicator.Spec.Resources)},
-			"status": map[string]any{"deployedResourcesCount": len(simpleReplicator.Status.DeployedItems)},
+			"spec": map[string]any{
+				"resourcesCount": len(simpleReplicator.Spec.Resources),
+			},
+			"status": map[string]any{
+				"deployedResourcesCount": len(simpleReplicator.Status.DeployedItems),
+			},
 		},
 	)
 
@@ -148,32 +153,130 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}()
 
 	// create the reconciliation handler for the given simplereplicator
-	var sri = &SimpleReplicatorInterface{
-		SimpleReplicator: simpleReplicator,
-		Reconciler:       reconciliation.NewReconciliationHandler(r, simpleReplicator),
-	}
+	//var sri = &SimpleReplicatorInterface{
+	//	SimpleReplicator: simpleReplicator,
+	//	Reconciler:       reconciliation.NewReconciliationHandler(r, simpleReplicator),
+	//}
 
-	// request a list of namespaces, which are required to inherit the defined object
-	requiredNamespaces, err := sri.Reconciler.ListAsHashMapWithLabelSelector(
-		ctx, &corev1.NamespaceList{}, generics.KeyFuncNamespaceName, simpleReplicator.Spec.Selector.LabelSelector)
+	/*
+
+		since multiple steps of the reconciliation need a full list of namespaces, which should be kept up to date
+		with the given resources, we need to fetch them from the cluster. after fetching the list, we create a sort
+		of hashmap from the list, since that simplifies the requirememt-checks during deletion, creation and updates.
+
+	*/
+
+	// request all required namespaces, according to the simplereplicators namespaceSelector
+	ls, err := metav1.LabelSelectorAsSelector(simpleReplicator.Spec.Selector.LabelSelector)
 	if err != nil {
-		_baseLog.Error(err, "creating requiredNamespaces")
+		_baseLog.Error(err, "error creating the labelselector from config",
+			"labelSelector", map[string]any{
+				"source": simpleReplicator.Spec.Selector.LabelSelector,
+				"result": ls,
+			})
 		return ctrl.Result{}, err
 	}
+	var nsList = &corev1.NamespaceList{}
+	if err := r.GetClient().List(ctx, nsList, &client.ListOptions{LabelSelector: ls}); err != nil {
+		_baseLog.Error(err, "error fetching namespaces from cluster")
+		return ctrl.Result{}, err
+	}
+	// request a list of namespaces, which are required to inherit the defined object
+	requiredNamespaces, err := generics.ObjectListToMap(nsList, generics.KeyFuncNamespaceName)
+	if err != nil {
+		_baseLog.Error(err, "error parsing map from list", "nsList", nsList)
+		return ctrl.Result{}, err
+	}
+	// with the defer function we ensure, that the reference can be collected safely
+	// from the garbage collector and will not be used after the function drops
+	defer func() {
+		requiredNamespaces = nil
+	}()
 	_baseLog.V(3).Info("requiredNamespaces content", "requiredNamespaces", requiredNamespaces)
 
-	// start removel of unwanted objects from the cluster
-	if err := sri.GarbageCollection(ctx); err != nil {
-		_baseLog.Error(err, "error with garbage collection")
-		return ctrl.Result{}, err
+	/*
+
+		with the given list of required namespaces, we will start with the garbage collection.
+
+	*/
+
+	for deployedItemKey, or := range simpleReplicator.Status.DeployedItems {
+
+		var deployedItemObject = or.GetObject()
+		var _deployedItemsLog = _baseLog.WithValues(
+			"deployedItem", map[string]any{
+				"metadata": map[string]any{
+					"group-version-kind": deployedItemObject.GetObjectKind().GroupVersionKind().String(),
+					"namespace":          deployedItemObject.GetNamespace(),
+					"name":               deployedItemObject.GetName(),
+					"deployedItemKey":    deployedItemKey,
+				},
+			},
+		)
+		_deployedItemsLog.V(3).Info("checking resource from status.deployedItems")
+
+		// trying to fetch the object from the cluster
+		if err := r.GetClient().Get(ctx, types.NamespacedName{
+			Namespace: deployedItemObject.GetNamespace(),
+			Name:      deployedItemObject.GetName(),
+		}, deployedItemObject); err != nil {
+			// if this is an notFound error return nil
+			// that will remove the object from the statusfield
+			if client.IgnoreNotFound(err) == nil {
+				_deployedItemsLog.V(3).Info("object not found")
+				delete(simpleReplicator.Status.DeployedItems, deployedItemKey)
+				continue
+			}
+			_deployedItemsLog.Error(err, "error fetching statusDeployedResource")
+			return ctrl.Result{}, err
+		}
+		_deployedItemsLog.V(3).Info("received statusDeployedObject from cluster",
+			"deployedItemObject", deployedItemObject)
+
+		// if the object does exist, check if the owner is in fact the simplereplicator resource
+		if isControlledBy := metav1.IsControlledBy(deployedItemObject, simpleReplicator); !isControlledBy {
+			_deployedItemsLog.V(3).Info("object doesn't contain ownerref -> ignoring", "isControlledBy", isControlledBy)
+			// remove the item from the deployedItems pool, since it is not related
+			delete(simpleReplicator.Status.DeployedItems, deployedItemKey)
+			continue
+		}
+
+		var hasRefInSpecs bool = slices.ContainsFunc(
+			simpleReplicator.Spec.Resources, func(u unstructured.Unstructured) bool {
+				return u.GetObjectKind().GroupVersionKind() == deployedItemObject.GetObjectKind().GroupVersionKind() &&
+					u.GetName() == deployedItemObject.GetName()
+			})
+		_deployedItemsLog.V(3).Info("similar item in .spec.resources -> ignoring", "hasRefInSpecs", hasRefInSpecs)
+		if hasRefInSpecs {
+			// if the item is referenced in the .spec.resources pool, then we will not remove it from the cluster
+			continue
+		}
+
+		// check whether the existing object, with the correct objectkind, version and name
+		// has its namespace in the requiredNamespaces map
+		if _, containsNamespace := requiredNamespaces["/"+deployedItemObject.GetNamespace()]; containsNamespace {
+			_deployedItemsLog.V(3).Info("object is found in correct namespace",
+				"requiredNamespaces", requiredNamespaces, "containsNamespace", containsNamespace)
+			continue
+		}
+
+		// if we came this far, the object probably should be removed from the cluster
+		if err := r.GetClient().Delete(ctx, deployedItemObject); err != nil {
+			_deployedItemsLog.Error(err, "failed removing objectRef from cluster")
+			return ctrl.Result{}, err
+		}
+		delete(simpleReplicator.Status.DeployedItems, deployedItemKey)
 	}
+	_baseLog.Info("finished garbage collection from the cluster")
 
 	// creating a sub function to utilize defer funcs and return options
 	subResourceReconciliation := func(_r unstructured.Unstructured) (ctrl.Result, error) {
-
 		var _resourceLog = _baseLog.WithValues(
 			"currentResource", map[string]any{
-				"metadata": map[string]any{"group-version-kind": _r.GroupVersionKind().String(), "name": _r.GetName()},
+				"metadata": map[string]any{
+					"group-version-kind": _r.GroupVersionKind().String(),
+					"name":               _r.GetName(),
+				},
 			},
 		)
 		_resourceLog.Info("reconciling sub-resource")
@@ -188,17 +291,35 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			requiredNamespacesHashMap = nil
 		}()
 
-		// get resources, that are directly linked to the simplereplicator, due to set labels
-		existingSubresourcesHashMap, err := sri.Reconciler.ListAsHashMapWithLabelSelector(
-			ctx, generics.UnstructuredListFromObject(_r), generics.KeyFuncNamespaceName, &metav1.LabelSelector{
-				MatchLabels: sri.Reconciler.GetOwnerLabels(_r.GetLabels()),
-			})
+		/*
+
+			fetch all objects from the cluster, which are related to the simplereplicator resource
+
+		*/
+
+		var ownerLabels = generics.GetOwnerLabels(simpleReplicator, _r.GetLabels())
+		// request all required namespaces, according to the simplereplicators namespaceSelector
+		ls, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{MatchLabels: ownerLabels})
 		if err != nil {
-			_resourceLog.Error(err, "creating existingSubresourcesHashMap failed")
+			_resourceLog.Error(err, "error creating labelSelector from controllerobject",
+				"labelSelector", map[string]any{
+					"source": ownerLabels,
+					"result": ls,
+				})
 			return ctrl.Result{}, err
 		}
-		_resourceLog.V(3).Info("existingSubresourcesHashMap content",
-			"existingSubresourcesHashMap", existingSubresourcesHashMap)
+		var refObjList = generics.ObjectToObjectList(&_r)
+		if err := r.GetClient().List(ctx, refObjList, &client.ListOptions{LabelSelector: ls}); err != nil {
+			_resourceLog.Error(err, "error fetching referenced objects from cluster", "refObjList", refObjList)
+			return ctrl.Result{}, err
+		}
+		// request a list of referenced objects, which are required to inherit the defined object
+		subresources, err := generics.ObjectListToMap(refObjList, generics.KeyFuncNamespaceName)
+		if err != nil {
+			_resourceLog.Error(err, "error parsing map from list", "subresources", subresources)
+			return ctrl.Result{}, err
+		}
+		_resourceLog.V(3).Info("subresources content", "subresources", subresources)
 
 		// parse through the required namespaces hashmap (the original), to handle create and update requests
 		for requiredNSKey := range requiredNamespaces {
@@ -220,18 +341,27 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			toDeploySubResource.SetNamespace(possibleResource.Namespace)
 
 			// check, whether subresource already exists and is related
-			objectInCluster, relatedObjectAlreadyExists := existingSubresourcesHashMap[possibleResource.String()]
+			objectInCluster, relatedObjectAlreadyExists := subresources[possibleResource.String()]
 
 			var unrelatedObjectAlreadyExists bool = false
 			if !relatedObjectAlreadyExists {
 				// check whether there already is an object, with the same groupversionkind and name in that namespace
-				unrelatedObjectAlreadyExists, err = sri.Reconciler.DoesObjectExist(ctx, toDeploySubResource)
-				if err != nil {
-					_requiredNamespaceLog.Error(err, "failed to fetch object from cluster", "toDeploySubResource", toDeploySubResource)
+				// trying to fetch the object from the cluster
+				if err := r.GetClient().Get(ctx, types.NamespacedName{
+					Namespace: toDeploySubResource.GetNamespace(),
+					Name:      toDeploySubResource.GetName(),
+				}, toDeploySubResource); client.IgnoreNotFound(err) != nil {
+					_requiredNamespaceLog.Error(err, "failed to fetch object from cluster")
 					return ctrl.Result{}, err
 				}
+				_requiredNamespaceLog.V(3).Info("received toDeploySubResource from cluster",
+					"toDeploySubResource", toDeploySubResource)
 
-				unrelatedObjectAlreadyExists = !metav1.IsControlledBy(toDeploySubResource, simpleReplicator)
+				// there is an objct, which could be overwritten
+				unrelatedObjectAlreadyExists = true
+
+				// the object may be already owned by the simplereplicator
+				relatedObjectAlreadyExists = metav1.IsControlledBy(toDeploySubResource, simpleReplicator)
 			}
 
 			_requiredNamespaceLog.V(3).Info("decision on create/update/ignore for given object",
@@ -252,13 +382,13 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				toDeploySubResource.SetResourceVersion(destination.GetResourceVersion())
 
 				// set ownership
-				if err := sri.Reconciler.TakeOwnership(toDeploySubResource); err != nil {
+				if err := generics.TakeOwnership(simpleReplicator, toDeploySubResource, r.GetScheme()); err != nil {
 					_requiredNamespaceLog.Error(err, "failed setting ownership of sub resource")
 					return err
 				}
 
 				// update
-				if err := sri.Reconciler.Update(ctx, toDeploySubResource); err != nil {
+				if err := r.GetClient().Update(ctx, toDeploySubResource); err != nil {
 					_requiredNamespaceLog.Error(err, "updating subresource in cluster failed")
 					return err
 				}
@@ -291,12 +421,12 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				break
 			case !relatedObjectAlreadyExists && !unrelatedObjectAlreadyExists:
 				// set ownership
-				if err := sri.Reconciler.SetOwnership(toDeploySubResource); err != nil {
+				if err := generics.SetOwnership(simpleReplicator, toDeploySubResource, r.GetScheme()); err != nil {
 					_requiredNamespaceLog.Error(err, "failed setting ownership of sub resource")
 					return ctrl.Result{}, err
 				}
 				// create the given object, since there is no object with the given metadata specs
-				if err := sri.Reconciler.Create(ctx, toDeploySubResource); err != nil {
+				if err := r.GetClient().Create(ctx, toDeploySubResource); err != nil {
 					_requiredNamespaceLog.Error(err, "creating subresource in cluster failed")
 					return ctrl.Result{}, err
 				}
@@ -313,11 +443,17 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// remove the items from the hashmaps
 			delete(requiredNamespacesHashMap, requiredNSKey)
 			_resourceLog.V(3).Info("removed item from requiredNamespacesHashMap",
-				"deleteRequest", map[string]any{"key": requiredNSKey, "currentState": requiredNamespacesHashMap},
+				"deleteRequest", map[string]any{
+					"key":          requiredNSKey,
+					"currentState": requiredNamespacesHashMap,
+				},
 			)
-			delete(existingSubresourcesHashMap, possibleResource.String())
-			_resourceLog.V(3).Info("removed item from existingSubresourcesHashMap",
-				"deleteRequest", map[string]any{"key": possibleResource.String(), "currentState": existingSubresourcesHashMap},
+			delete(subresources, possibleResource.String())
+			_resourceLog.V(3).Info("removed item from subresources",
+				"deleteRequest", map[string]any{
+					"key":          possibleResource.String(),
+					"currentState": subresources,
+				},
 			)
 
 			// update the state of the created/updated resource in the status
@@ -334,7 +470,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		_resourceLog.V(3).Info("following items are left in the important hashmaps",
 			"requiredNamespacesHashMap", requiredNamespacesHashMap,
-			"existingSubresourcesHashMap", existingSubresourcesHashMap,
+			"subresources", subresources,
 		)
 		return ctrl.Result{}, nil
 	}
@@ -352,9 +488,8 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	_baseLog.Info("finished reconciliation of subresources")
 
 	r.GetRecorder().Eventf(
-		simpleReplicator, nil,
-		"Normal", "ResourceReplication",
-		"ReplicateResources", "successfully finished reconciliation of simplereplicator resources.")
+		simpleReplicator, nil, "Normal", "ResourceReplication", "ReplicateResources",
+		"successfully finished reconciliation of simplereplicator resources.")
 
 	return ctrl.Result{}, nil
 }

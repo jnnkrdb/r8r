@@ -4,7 +4,9 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -23,6 +25,7 @@ type KeyFunc func(client.Object) string
 
 // some default function generally used
 var (
+	// "<namespace>/<name>"
 	KeyFuncNamespaceName = KeyFunc(func(o client.Object) string {
 		return o.GetNamespace() + "/" + o.GetName()
 	})
@@ -51,4 +54,16 @@ func ObjectListToMap(list client.ObjectList, fnKey KeyFunc) (ObjectHashMap, erro
 	})
 
 	return out, err
+}
+
+// get the corresponding unstructuredList type, from a given unstructured Object,
+// holding the information for an actual object in the cluster
+func ObjectToObjectList(obj client.Object) client.ObjectList {
+	var unstructuredList = &unstructured.UnstructuredList{}
+	unstructuredList.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   obj.GetObjectKind().GroupVersionKind().Group,
+		Version: obj.GetObjectKind().GroupVersionKind().Version,
+		Kind:    obj.GetObjectKind().GroupVersionKind().Kind + "List",
+	})
+	return unstructuredList
 }
