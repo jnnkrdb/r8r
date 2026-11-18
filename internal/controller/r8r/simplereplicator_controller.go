@@ -297,7 +297,10 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		*/
 
-		var ownerLabels = generics.GetOwnerLabels(simpleReplicator, _r.GetLabels())
+		// we use an empty map of labels, because there might be a difference in labels after an simplereplicator update
+		// for the corresponding resource, which would result in 0 realted objects, due to the labelselector list options
+		// the objecst in the cluster would not be fetched with different labels
+		var ownerLabels = generics.GetOwnerLabels(simpleReplicator, make(map[string]string))
 		// request all required namespaces, according to the simplereplicators namespaceSelector
 		ls, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{MatchLabels: ownerLabels})
 		if err != nil {
@@ -308,11 +311,13 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				})
 			return ctrl.Result{}, err
 		}
+		_resourceLog.V(3).Info("created labelselector for resource", "ownerLabels", ownerLabels)
 		var refObjList = generics.ObjectToObjectList(&_r)
 		if err := r.GetClient().List(ctx, refObjList, &client.ListOptions{LabelSelector: ls}); err != nil {
 			_resourceLog.Error(err, "error fetching referenced objects from cluster", "refObjList", refObjList)
 			return ctrl.Result{}, err
 		}
+		_resourceLog.V(3).Info("received list of related objects", "refObjList", refObjList)
 		// request a list of referenced objects, which are required to inherit the defined object
 		subresources, err := generics.ObjectListToMap(refObjList, generics.KeyFuncNamespaceName)
 		if err != nil {
@@ -342,6 +347,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 			// check, whether subresource already exists and is related
 			objectInCluster, relatedObjectAlreadyExists := subresources[possibleResource.String()]
+			_requiredNamespaceLog.V(3).Info("related object exists in subresources map")
 
 			var unrelatedObjectAlreadyExists bool = false
 			if !relatedObjectAlreadyExists {
@@ -387,6 +393,13 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					return err
 				}
 
+				_requiredNamespaceLog.V(3).Info("trying to update the resource in the cluster",
+					"clusterResources", map[string]any{
+						"objectInCluster":     objectInCluster,
+						"toDeploySubResource": toDeploySubResource,
+					},
+				)
+
 				// update
 				if err := r.GetClient().Update(ctx, toDeploySubResource); err != nil {
 					_requiredNamespaceLog.Error(err, "updating subresource in cluster failed")
@@ -402,7 +415,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				if err := _update(objectInCluster); err != nil {
 					return ctrl.Result{}, err
 				}
-				break
 			case !relatedObjectAlreadyExists && unrelatedObjectAlreadyExists:
 				// given object already exists but is unrelated to the simplereplicator resource
 				// -> check whether we should set ownership and update or ignore object
@@ -413,12 +425,10 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					// because we can completly ignore it now
 					continue
 				}
-
 				// updated and set ownership
 				if err := _update(toDeploySubResource); err != nil {
 					return ctrl.Result{}, err
 				}
-				break
 			case !relatedObjectAlreadyExists && !unrelatedObjectAlreadyExists:
 				// set ownership
 				if err := generics.SetOwnership(simpleReplicator, toDeploySubResource, r.GetScheme()); err != nil {
@@ -431,7 +441,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					return ctrl.Result{}, err
 				}
 				_requiredNamespaceLog.V(3).Info("created subresource", "toDeploySubResource", toDeploySubResource)
-				break
 			default:
 				// case relatedObjectAlreadyExists && unrelatedObjectAlreadyExists:
 				var e error = fmt.Errorf("possible coexistence found: relatedObjectAlreadyExists = %t, unrelatedObjectAlreadyExists = %t",
