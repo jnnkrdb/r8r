@@ -336,7 +336,8 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 			_requiredNamespaceLog := _resourceLog.WithValues(
 				"requiredNamespaceHashMap", map[string]any{
-					"key": requiredNSKey, "possibleResource": possibleResource,
+					"key":              requiredNSKey,
+					"possibleResource": possibleResource,
 				},
 			)
 			_requiredNamespaceLog.V(3).Info("handle required namespace")
@@ -347,27 +348,40 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 			// check, whether subresource already exists and is related
 			objectInCluster, relatedObjectAlreadyExists := subresources[possibleResource.String()]
-			_requiredNamespaceLog.V(3).Info("related object exists in subresources map")
+			_requiredNamespaceLog.V(3).Info("related object exists in subresources map",
+				"subresources[]", map[string]any{
+					"content":                    subresources,
+					"requested-key":              possibleResource.String(),
+					"relatedObjectAlreadyExists": relatedObjectAlreadyExists,
+					"objectInCluster":            objectInCluster,
+				},
+			)
 
 			var unrelatedObjectAlreadyExists bool = false
 			if !relatedObjectAlreadyExists {
 				// check whether there already is an object, with the same groupversionkind and name in that namespace
 				// trying to fetch the object from the cluster
-				if err := r.GetClient().Get(ctx, types.NamespacedName{
+				err := r.GetClient().Get(ctx, types.NamespacedName{
 					Namespace: toDeploySubResource.GetNamespace(),
 					Name:      toDeploySubResource.GetName(),
-				}, toDeploySubResource); client.IgnoreNotFound(err) != nil {
-					_requiredNamespaceLog.Error(err, "failed to fetch object from cluster")
-					return ctrl.Result{}, err
+				}, toDeploySubResource)
+
+				// if there was no error with the request, we can assume there is an
+				// object in the clsuter and we fetched it correctly from the cluster
+				if err == nil {
+					// there is an objct, which could be overwritten
+					unrelatedObjectAlreadyExists = true
+					// the object may be already owned by the simplereplicator
+					relatedObjectAlreadyExists = metav1.IsControlledBy(toDeploySubResource, simpleReplicator)
+
+				} else {
+					if client.IgnoreNotFound(err) != nil {
+						_requiredNamespaceLog.Error(err, "failed to fetch object from cluster")
+						return ctrl.Result{}, err
+					}
 				}
 				_requiredNamespaceLog.V(3).Info("received toDeploySubResource from cluster",
 					"toDeploySubResource", toDeploySubResource)
-
-				// there is an objct, which could be overwritten
-				unrelatedObjectAlreadyExists = true
-
-				// the object may be already owned by the simplereplicator
-				relatedObjectAlreadyExists = metav1.IsControlledBy(toDeploySubResource, simpleReplicator)
 			}
 
 			_requiredNamespaceLog.V(3).Info("decision on create/update/ignore for given object",
