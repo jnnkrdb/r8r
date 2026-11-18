@@ -200,6 +200,17 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	*/
 
+	// define the function for removing an object from the statusfield and the cluster
+	_deleteFromCluster := func(key string, o client.Object) error {
+		if err := r.GetClient().Delete(ctx, o); err != nil {
+			return err
+		}
+		delete(simpleReplicator.Status.DeployedItems, key)
+		return nil
+	}
+
+	_baseLog.Info("starting garbage collection from the cluster",
+		"statusDeployedItemsAmount", len(simpleReplicator.Status.DeployedItems))
 	for deployedItemKey, or := range simpleReplicator.Status.DeployedItems {
 
 		var deployedItemObject = or.GetObject()
@@ -247,13 +258,21 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					u.GetName() == deployedItemObject.GetName()
 			})
 		_deployedItemsLog.V(3).Info("similar item in .spec.resources -> ignoring", "hasRefInSpecs", hasRefInSpecs)
-		if hasRefInSpecs {
-			// if the item is referenced in the .spec.resources pool, then we will not remove it from the cluster
+		if !hasRefInSpecs {
+			// if the item is not referenced in the .spec.resources pool, then we will not remove it from the cluster
+			if err := _deleteFromCluster(deployedItemKey, deployedItemObject); err != nil {
+				_deployedItemsLog.Error(err, "failed removing objectRef from cluster")
+				return ctrl.Result{}, err
+			}
 			continue
 		}
 
 		// check whether the existing object, with the correct objectkind, version and name
 		// has its namespace in the requiredNamespaces map
+		_deployedItemsLog.V(3).Info("checking whether the object is also in one of the required namespaces",
+			"requiredNamespaces", requiredNamespaces,
+			"key", "/"+deployedItemObject.GetNamespace(),
+		)
 		if _, containsNamespace := requiredNamespaces["/"+deployedItemObject.GetNamespace()]; containsNamespace {
 			_deployedItemsLog.V(3).Info("object is found in correct namespace",
 				"requiredNamespaces", requiredNamespaces, "containsNamespace", containsNamespace)
@@ -261,13 +280,21 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		// if we came this far, the object probably should be removed from the cluster
-		if err := r.GetClient().Delete(ctx, deployedItemObject); err != nil {
+		_deployedItemsLog.V(3).Info("removing the object from the cluster",
+			"deployedItemObject", deployedItemObject)
+		if err := _deleteFromCluster(deployedItemKey, deployedItemObject); err != nil {
 			_deployedItemsLog.Error(err, "failed removing objectRef from cluster")
 			return ctrl.Result{}, err
 		}
-		delete(simpleReplicator.Status.DeployedItems, deployedItemKey)
 	}
 	_baseLog.Info("finished garbage collection from the cluster")
+
+	/*
+
+		after garbage collection all unwanted resources should be removed from the cluster
+		this allows us now to create new resources and update the still existing ones
+
+	*/
 
 	// creating a sub function to utilize defer funcs and return options
 	subResourceReconciliation := func(_r unstructured.Unstructured) (ctrl.Result, error) {
