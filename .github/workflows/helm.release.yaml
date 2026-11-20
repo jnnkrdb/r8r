@@ -14,5 +14,8 @@ jobs:
     uses: jnnkrdb/helm-charts/.github/workflows/workflow.release.yaml@main
     with:
       charts-path: .helm/charts
+    permissions:
+      contents: write
+      pages: write
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
