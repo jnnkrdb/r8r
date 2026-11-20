@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
 )
@@ -62,7 +63,14 @@ var _ = Describe("SimpleReplicator Controller", func() {
 						Name:      resourceName,
 						Namespace: resourceNamespace,
 					},
-					// TO-DO(user): Specify other spec details if needed.
+					Spec: r8rv1beta1.SimpleReplicatorSpec{
+						Selector: r8rv1beta1.Selector{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: func() map[string]string { return map[string]string{"test": "test"} }(),
+							},
+						},
+						Resources: []unstructured.Unstructured{},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -88,8 +96,6 @@ var _ = Describe("SimpleReplicator Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TO-DO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
 	})
 })
