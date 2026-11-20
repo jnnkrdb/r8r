@@ -152,12 +152,6 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}()
 
-	// create the reconciliation handler for the given simplereplicator
-	//var sri = &SimpleReplicatorInterface{
-	//	SimpleReplicator: simpleReplicator,
-	//	Reconciler:       reconciliation.NewReconciliationHandler(r, simpleReplicator),
-	//}
-
 	/*
 
 		since multiple steps of the reconciliation need a full list of namespaces, which should be kept up to date
@@ -252,7 +246,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			continue
 		}
 
-		var hasRefInSpecs bool = slices.ContainsFunc(
+		var hasRefInSpecs = slices.ContainsFunc(
 			simpleReplicator.Spec.Resources, func(u unstructured.Unstructured) bool {
 				return u.GetObjectKind().GroupVersionKind() == deployedItemObject.GetObjectKind().GroupVersionKind() &&
 					u.GetName() == deployedItemObject.GetName()
@@ -384,7 +378,7 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				},
 			)
 
-			var unrelatedObjectAlreadyExists bool = false
+			var unrelatedObjectAlreadyExists = false
 			if !relatedObjectAlreadyExists {
 				// check whether there already is an object, with the same groupversionkind and name in that namespace
 				// trying to fetch the object from the cluster
@@ -484,9 +478,10 @@ func (r *SimpleReplicatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				_requiredNamespaceLog.V(3).Info("created subresource", "toDeploySubResource", toDeploySubResource)
 			default:
 				// case relatedObjectAlreadyExists && unrelatedObjectAlreadyExists:
-				var e error = fmt.Errorf("possible coexistence found: relatedObjectAlreadyExists = %t, unrelatedObjectAlreadyExists = %t",
+				var e = fmt.Errorf("coexistence found: relatedObjectAlreadyExists = %t, unrelatedObjectAlreadyExists = %t",
 					relatedObjectAlreadyExists, unrelatedObjectAlreadyExists)
-				_resourceLog.Error(e, "related and unrelated objects cannot coexist, there must be an issue with the relation checks")
+				_resourceLog.Error(e,
+					"related and unrelated objects cannot coexist, there must be an issue with the relation checks")
 				return ctrl.Result{}, e
 			}
 
