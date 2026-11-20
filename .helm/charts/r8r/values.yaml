@@ -27,7 +27,7 @@ images:
   r8r:
     registry: ghcr.io
     repository: jnnkrdb/r8r
-    tag: mgr.1.0.54
+    tag: mgr.master
     digest: null
     imagePullPolicy: Always
     imagePullSecrets: []
