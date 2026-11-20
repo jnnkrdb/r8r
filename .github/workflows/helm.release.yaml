@@ -12,10 +12,10 @@ on:
 jobs:
   release:
     uses: jnnkrdb/helm-charts/.github/workflows/workflow.release.yaml@main
-    with:
-      charts-path: .helm/charts
     permissions:
       contents: write
       pages: write
+    with:
+      charts-path: .helm/charts
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
