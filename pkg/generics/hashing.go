@@ -17,12 +17,12 @@ type ObjectIdentifier interface {
 
 // create the identifier hash from the given object
 func CreateIdentifierHashFromObject(o ObjectIdentifier) string {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s/%s/%s/%s/%s",
+	sum := sha256.Sum256(fmt.Appendf([]byte{}, "%s/%s/%s/%s/%s",
 		o.GetObjectKind().GroupVersionKind().Group,
 		o.GetObjectKind().GroupVersionKind().Version,
 		o.GetObjectKind().GroupVersionKind().Kind,
 		o.GetNamespace(),
 		o.GetName(),
-	)))
+	))
 	return hex.EncodeToString(sum[:8]) // 16 chars
 }
