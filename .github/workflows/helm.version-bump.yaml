@@ -8,4 +8,4 @@ jobs:
   chart-tests:
     uses: jnnkrdb/helm-charts/.github/workflows/workflow.version-bump.yaml@main
     with:
-      charts-path: .helm/charts
+      chart-test-yaml: .helm/ct.yaml
