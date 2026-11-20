@@ -3,7 +3,7 @@ name: Helm - Lint and Test
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - '.helm/**'
       - '.github/workflows/helm.lint-test.yaml'
