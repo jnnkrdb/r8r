@@ -1,3 +1,5 @@
 .policy/
 .values/
 .unittests/
+ignore/
+charts/*.tgz
