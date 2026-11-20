@@ -36,9 +36,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	clusterv1alpha1 "github.com/jnnkrdb/r8r/api/cluster/v1alpha1"
 	r8rv1beta1 "github.com/jnnkrdb/r8r/api/r8r/v1beta1"
-	clustercontroller "github.com/jnnkrdb/r8r/internal/controller/cluster"
 	r8rcontroller "github.com/jnnkrdb/r8r/internal/controller/r8r"
 	// +kubebuilder:scaffold:imports
 )
@@ -51,7 +49,6 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(clusterv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(r8rv1beta1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
@@ -60,10 +57,7 @@ func init() {
 func main() {
 
 	// which crds should be reconciled
-	var disableClusterV1Alpha1ClusterObjects bool
 	var disableR8RV1Beta1SimpleReplicator bool
-	flag.BoolVar(&disableClusterV1Alpha1ClusterObjects, "disable-cluster-v1alpha1-clusterobject", false,
-		"Disable the reconciliation of the resource cluster.jnnkrdb.de/v1alpha1 ClusterObject.")
 	flag.BoolVar(&disableR8RV1Beta1SimpleReplicator, "disable-r8r-v1beta1-simplereplicator", false,
 		"Disable the reconciliation of the resource r8r.jnnkrdb.de/v1beta1 SimpleReplicator.")
 
@@ -190,17 +184,6 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "Failed to start manager")
 		os.Exit(1)
-	}
-
-	if !disableClusterV1Alpha1ClusterObjects {
-		if err := (&clustercontroller.ClusterObjectReconciler{
-			Client:   mgr.GetClient(),
-			Scheme:   mgr.GetScheme(),
-			Recorder: mgr.GetEventRecorder("clusterobject-controller"),
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create controller", "controller", "cluster-clusterobject")
-			os.Exit(1)
-		}
 	}
 
 	if !disableR8RV1Beta1SimpleReplicator {
