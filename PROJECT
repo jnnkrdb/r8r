@@ -15,15 +15,6 @@ resources:
     namespaced: false
   controller: true
   domain: jnnkrdb.de
-  group: cluster
-  kind: ClusterObject
-  path: github.com/jnnkrdb/r8r/api/cluster/v1alpha1
-  version: v1alpha1
-- api:
-    crdVersion: v1
-    namespaced: false
-  controller: true
-  domain: jnnkrdb.de
   group: r8r
   kind: SimpleReplicator
   path: github.com/jnnkrdb/r8r/api/r8r/v1beta1

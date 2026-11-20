@@ -5,13 +5,13 @@ linters:
   default: none
   disable:
   - goconst
+  - gocyclo
   enable:
   - copyloopvar
   - depguard
   - dupl
   - errcheck
   - ginkgolinter
-  - gocyclo
   - govet
   - ineffassign
   - lll
