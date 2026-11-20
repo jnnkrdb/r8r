@@ -18,4 +18,4 @@ jobs:
     with:
       charts-path: .helm/charts
     secrets:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ secrets.GHP_TOKEN }}
