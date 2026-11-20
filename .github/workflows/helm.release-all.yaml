@@ -11,6 +11,9 @@ on:
 jobs:
   release-all:
     uses: jnnkrdb/helm-charts/.github/workflows/workflow.release-all.yaml@main
+    permissions:
+      contents: read
+      packages: write
     with:
       chart-test-yaml: .helm/ct.yaml
       registry: ghcr.io
