@@ -2,4 +2,3 @@
 .values/
 .unittests/
 ignore/
-charts/*.tgz
