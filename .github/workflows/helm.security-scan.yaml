@@ -3,10 +3,10 @@ name: Helm - Security Scan
 on:
   push:
     paths:
-      - '.helm/charts/**'
+      - '.helm/**'
   pull_request:
     paths:
-      - '.helm/charts/**'
+      - '.helm/**'
 
 jobs:
   chart-tests:
