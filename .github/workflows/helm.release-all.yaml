@@ -18,6 +18,6 @@ jobs:
       chart-test-yaml: .helm/ct.yaml
       registry: ghcr.io
       registry-username: ${{ github.actor }}
-      registry-repopath: ${{ github.repository_owner }}/helm-r8r
+      registry-repopath: ${{ github.repository_owner }}/r8r-helm
     secrets:
       registry-password: ${{ secrets.GHP_TOKEN }}

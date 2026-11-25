@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - master
+      - main
       - dev
     paths-ignore:
       - '.devcontainer/**'
+      - '.helm/**'
       - 'README.md'
       - 'LICENSE'
   pull_request:
@@ -14,8 +16,7 @@ on:
       - master 
 
 env:
-  HELM_EXPERIMENTAL_OCI: 1 #enable OCI support
-  GITVERSION_FILE: .github/gitversion/GitVersion.yml
+  GITVERSION_FILE: .github/GitVersion.yml
   REPOSITORY: ghcr.io/jnnkrdb/r8r
   DOCKERFILE: ./Dockerfile
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
